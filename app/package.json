@@ -1,0 +1,56 @@
+{
+  "name": "agentsec-app",
+  "version": "0.1.0",
+  "description": "AgentSec 桌面客户端（Electron + React + Vite + TS）",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "build:engine": "cd ../engine && .venv/bin/pyinstaller --onedir --name agentsec-engine --noconfirm --clean --distpath dist_pkg --workpath build_pkg --paths . --collect-all pyatr --collect-all cvss --collect-all ruamel --collect-submodules agentsec_engine packaging/run_engine.py",
+    "dist": "npm run build:engine && npm run build && electron-builder --mac dmg"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  },
+  "build": {
+    "appId": "dev.agentsec.app",
+    "productName": "AgentSec",
+    "icon": "build/icon.icns",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../engine/dist_pkg/agentsec-engine",
+        "to": "engine"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "target": [
+        "dmg"
+      ],
+      "identity": null
+    }
+  }
+}

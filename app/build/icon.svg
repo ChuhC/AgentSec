@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.3" y2="1">
+      <stop offset="0%" stop-color="#140820"/>
+      <stop offset="55%" stop-color="#0a0612"/>
+      <stop offset="100%" stop-color="#06040c"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="38%" r="55%">
+      <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.35"/>
+      <stop offset="45%" stop-color="#6d28d9" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#6d28d9" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hexFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c084fc"/>
+      <stop offset="45%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#6d28d9"/>
+    </linearGradient>
+    <linearGradient id="hexStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e9d5ff"/>
+      <stop offset="50%" stop-color="#c084fc"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <rect width="1024" height="1024" fill="url(#glow)"/>
+
+  <!-- Logo group: LogoMark scaled to ~512px (32 * 16) -->
+  <g transform="translate(256 256) scale(16)" filter="url(#softGlow)">
+    <!-- Hexagon shield -->
+    <path
+      d="M16 2 L28 9 V23 L16 30 L4 23 V9 Z"
+      fill="url(#hexFill)"
+      fill-opacity="0.22"
+      stroke="url(#hexStroke)"
+      stroke-width="1.6"
+      stroke-linejoin="round"
+    />
+    <!-- Stylized A -->
+    <path
+      d="M16 9 L21 22 H18 L16.8 19 H15.2 L14 22 H11 Z"
+      fill="#f5f0ff"
+    />
+  </g>
+</svg>

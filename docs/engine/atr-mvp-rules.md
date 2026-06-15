@@ -1,7 +1,11 @@
 # agentSec · ATR 暴露面规则 — MVP 方案
 
-> 状态：已确认  
+> 状态：已实现（pyatr 0.2.6 接入完成）  
 > 依据：[`architecture.md`](../architecture/architecture.md) 附录 B/C、[`requirements.md`](../requirements/requirements.md)
+
+> **实测更新（接入后）**：`pyatr` 包**内置 459 条规则**（Layer 1 = regex/pattern），
+> 而非外挂 `rules/` 目录；其中 `status=stable` 共 **26 条**。bundled 覆盖 **9 个类别**
+> （无 `model-security`，`data-poisoning` 仅 4 条）。MVP 子集据此调整为下方实测口径。
 
 ---
 
@@ -9,12 +13,26 @@
 
 | 项 | 决策 |
 |----|------|
-| **暴露面引擎** | [ATR](https://github.com/Agent-Threat-Rule/agent-threat-rules) via **pyATR** |
-| **规则交付** | `rules/` **子集内置**于 dmg；扫描时 **纯离线** |
-| **LLM** | 不使用 |
+| **暴露面引擎** | [ATR](https://github.com/Agent-Threat-Rule/agent-threat-rules) via **pyatr 0.2.6**（`load_bundled_rules()`） |
+| **规则交付** | pyatr 包**内置**规则，随引擎打包；扫描时 **纯离线**、无 LLM |
+| **运行时** | pyatr 需 **Python ≥ 3.10**；引擎跑在 `engine/.venv`（3.11） |
 | **CVE** | **不在 ATR**；由 `CVEDetector` + OSV 单独处理 |
-| **OpenClaw 补充** | `openclaw security audit --json`（专有 checkId） |
-| **MVP 规则规模** | 从 ATR 全库（~651 条 / 10 类）筛 **~45–60 条** `pattern` + `stable` |
+| **OpenClaw 补充** | `openclaw security audit --json`（占位，待接入） |
+| **MVP 规则子集** | `status=stable` 且 `tags.scan_target ∈ {mcp, skill, both}` ⇒ **18 条**（静态可扫目标）|
+
+### 实测 API（pyatr 0.2.6）
+
+```python
+from pyatr import ATREngine, AgentEvent
+engine = ATREngine(); engine.load_bundled_rules()        # 459 条
+# 静态文件扫描：内容填入所有字段 + 按子集 rule_id 过滤命中
+ev = AgentEvent(content=text, fields={f: text for f in ALL_FIELDS})
+matches = engine.evaluate(ev)   # → ATRMatch(rule_id, title, severity, confidence, matched_patterns, tags)
+```
+
+- 合法 `event_type`：`llm_input / llm_output / tool_call / tool_response / multi_agent_message`（另 `content` 字段直接可匹配）
+- `engine.rules` 只读 ⇒ 子集通过**过滤 matches 的 rule_id**实现（而非替换规则集）
+- 规则分类信息在 `rule.tags`：`category / subcategory / scan_target / confidence`
 
 ---
 
@@ -84,13 +102,18 @@
 
 ---
 
-## 6. 实施顺序（建议）
+## 6. 实施进度
 
-1. **Adapter 调研表**：Hermes/OpenClaw 配置/skill/MCP 路径清单  
-2. **规则子集 v1**：按上表 10 类从 ATR 仓库选出 ~50 条，写入 `atr_rules/` + 清单 `atr_rules/MANIFEST.yaml`  
-3. **ATREngine 封装**：`ExposureDetector.scan(paths) → list[ExposureFinding]`  
-4. **OpenClawAuditWrapper** 并行，Reporter 合并  
-5. **fixture 测试**：每类至少 1 个 positive + 1 个 negative 样本  
+- [x] **ATREngine 封装** `engine/agentsec_engine/detectors/exposure.py`：`load_bundled_rules` →
+      MVP 子集过滤（18 条）→ `scan_file` 静态评估 → 映射为 `ExposureFinding`
+- [x] **子集口径**：`stable` + `scan_target∈{mcp,skill,both}`；可选 `include_experimental=True` 扩展
+- [x] **样例驱动**：`data/samples/`（Hermes/OpenClaw 的 mcp.json + SKILL.md）让真实 ATR 跑出
+      `ATR-2026-NNNNN` 命中（含真实行号定位）
+- [x] **映射**：severity（critical/high→高，medium→中，其余→低）、category→中文、
+      `matched_patterns` 回溯原文片段+行号作证据、按类别生成中文 `recommendation`/通俗说明
+- [ ] **真实 Adapter 路径**：`atr_targets()` 现返回样例文件，待替换为本机实际 skill/mcp/agent 配置
+- [ ] **OpenClawAuditCollector**：接入 `openclaw security audit --json`
+- [ ] 视需要纳入精选 `experimental` 规则以补齐 medium/low 与更多类别
 
 ---
 
