@@ -1,0 +1,26 @@
+# agentSec MVP ATR 规则子集 —— 实测口径
+#
+# 接入 pyatr 0.2.6 后，规则由 `pyatr.ATREngine.load_bundled_rules()` 提供（内置 459 条，
+# Layer 1 = regex/pattern），无需在本目录维护 YAML 拷贝。
+#
+# MVP 子集由 ExposureDetector 在运行时按以下条件动态过滤：
+#   status == "stable"  且  tags.scan_target ∈ {mcp, skill, both}
+# 当前解析得到 18 条（随 pyatr 版本可能变化）。
+#
+# 如需扩展覆盖（补 medium/low 与更多类别）：ExposureDetector(include_experimental=True)
+
+version: 1
+engine: pyatr>=0.2.6
+selection:
+  status: [stable]
+  scan_target: [mcp, skill, both]
+resolved_subset_size: 18
+categories_covered:
+  - prompt-injection
+  - tool-poisoning
+  - context-exfiltration
+  - agent-manipulation
+  - skill-compromise
+  - privilege-escalation
+  - model-abuse
+note: scan_target=agent_config 及 llm/llm_io/runtime 目标暂不纳入（需运行时数据或非静态）。

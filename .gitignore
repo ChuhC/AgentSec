@@ -1,0 +1,27 @@
+# 依赖
+node_modules/
+app/node_modules/
+
+# 构建产物
+app/dist/
+app/dist-electron/
+app/release/
+
+# Python
+engine/.venv/
+engine/**/__pycache__/
+engine/*.egg-info/
+engine/.pytest_cache/
+*.pyc
+
+# 打包产物（PyInstaller / electron-builder）
+engine/dist_pkg/
+engine/build_pkg/
+engine/*.spec
+
+# 运行时数据 / 快照
+*.db
+.DS_Store
+
+# 日志
+*.log
