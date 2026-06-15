@@ -39,8 +39,20 @@ let nextId = 1;
 let stdoutBuf = "";
 const pendingEvents: { event: string; data: any }[] = [];
 
+const DEBUG =
+  process.env.AGENTSEC_DEBUG === "1" || !!process.env["VITE_DEV_SERVER_URL"];
+
+function log(...args: unknown[]) {
+  if (DEBUG) console.log("[main]", ...args);
+}
+
 function emitEngineEvent(payload: { event: string; data: any }) {
-  if (win && !win.webContents.isLoading()) {
+  if (payload.event === "progress" && DEBUG) {
+    log("engine-event progress", payload.data?.percent, payload.data?.label);
+  } else if (payload.event !== "progress" && DEBUG) {
+    log("engine-event", payload.event);
+  }
+  if (win && !win.isDestroyed()) {
     win.webContents.send("engine-event", payload);
   } else {
     pendingEvents.push(payload);
@@ -48,14 +60,38 @@ function emitEngineEvent(payload: { event: string; data: any }) {
 }
 
 function flushPendingEvents() {
-  if (!win) return;
+  if (!win || win.isDestroyed()) return;
+  log("flush pending events:", pendingEvents.length);
   while (pendingEvents.length) {
     win.webContents.send("engine-event", pendingEvents.shift()!);
   }
 }
 
+function stopEngine() {
+  if (!engine) return;
+  try {
+    engine.stdin.end();
+  } catch {
+    /* ignore */
+  }
+  engine.kill();
+  engine = null;
+  for (const [id, resolve] of pending.entries()) {
+    pending.delete(id);
+    resolve({ error: { message: "engine stopped" } });
+  }
+}
+
+/** 开发态页面热更新不会重启 Python 子进程，需显式 reload 引擎以加载新 IPC。 */
+function restartEngine() {
+  stopEngine();
+  stdoutBuf = "";
+  startEngine();
+}
+
 function startEngine() {
   const { cmd, args, cwd } = resolveEngine();
+  log("start engine:", cmd, args.join(" "), "cwd=", cwd);
   engine = spawn(cmd, args, {
     cwd,
     env: { ...process.env, PYTHONUNBUFFERED: "1" },
@@ -74,6 +110,7 @@ function startEngine() {
 
   engine.stderr.setEncoding("utf-8");
   engine.stderr.on("data", (chunk: string) => {
+    // 引擎日志走 stderr，dev 时在运行 npm run dev 的终端里可见
     process.stderr.write("[py] " + chunk);
   });
 
@@ -81,6 +118,13 @@ function startEngine() {
     console.error("[main] engine exited:", code);
     engine = null;
   });
+
+  // 引擎就绪探测
+  setTimeout(() => {
+    engineRequest("ping", {})
+      .then(() => log("engine ping ok"))
+      .catch((e) => console.error("[main] engine ping failed:", e.message));
+  }, 500);
 }
 
 function handleEngineLine(line: string) {
@@ -119,15 +163,15 @@ function engineRequest(method: string, params: any): Promise<any> {
 
 function createWindow() {
   win = new BrowserWindow({
-    width: 1024,
-    height: 680,
-    minWidth: 960,
-    minHeight: 600,
+    width: 1280,
+    height: 800,
+    minWidth: 1024,
+    minHeight: 640,
     backgroundColor: "#0a0612",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -136,10 +180,14 @@ function createWindow() {
   const devUrl = process.env["VITE_DEV_SERVER_URL"];
   if (devUrl) {
     win.loadURL(devUrl);
+    win.webContents.openDevTools({ mode: "detach" });
   } else {
     win.loadFile(path.join(APP_ROOT, "dist", "index.html"));
   }
-  win.webContents.once("did-finish-load", flushPendingEvents);
+  win.webContents.on("did-finish-load", () => {
+    flushPendingEvents();
+    if (devUrl) restartEngine();
+  });
 }
 
 ipcMain.handle("engine-request", async (_e, method: string, params: any) => {
@@ -148,14 +196,14 @@ ipcMain.handle("engine-request", async (_e, method: string, params: any) => {
 
 app.whenReady().then(() => {
   createWindow();
-  startEngine();
+  // 开发态在 did-finish-load 时 restartEngine；打包态在此启动一次
+  if (!process.env["VITE_DEV_SERVER_URL"]) startEngine();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on("window-all-closed", () => {
-  engine?.stdin.end();
-  engine?.kill();
+  stopEngine();
   if (process.platform !== "darwin") app.quit();
 });

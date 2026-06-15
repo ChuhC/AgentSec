@@ -37,14 +37,18 @@ class ScanOrchestrator:
     def cancel(self) -> None:
         self._cancelled = True
 
+    def _is_cancelled(self) -> bool:
+        return self._cancelled
+
     def run(self, scope: str = "本机全部", scope_path: Optional[str] = None,
             on_progress: Optional[ProgressCb] = None, simulate_delay: bool = True) -> dict:
         """执行一次扫描。返回最终快照 dict；取消则返回 {"cancelled": True}。"""
-        self._cancelled = False
         started = datetime.now()
         t0 = time.time()
 
         def progress(stage: str, percent: int, label: str, counts=None):
+            if self._cancelled:
+                return
             if on_progress:
                 on_progress({
                     "type": "progress",
@@ -58,6 +62,8 @@ class ScanOrchestrator:
         progress("discovery", 10, "正在发现本机 Agent 与资产…")
         if simulate_delay:
             time.sleep(0.4)
+        if self._cancelled:
+            return {"cancelled": True}
         agents, assets, atr_targets, adapter_status = discover_all(scope_path)
         if self._cancelled:
             return {"cancelled": True}
@@ -75,12 +81,17 @@ class ScanOrchestrator:
         total = len(targets) or 1
 
         def atr_file_progress(done: int, total_files: int) -> None:
+            if self._cancelled:
+                return
             # 暴露面阶段占 55%–78%，按文件数平滑推进
             pct = 55 + int(23 * done / max(total_files, 1))
             progress("exposure", pct, f"漏洞检测中 ({done}/{total_files})…", counts)
 
         exposure_findings = self.exposure.scan(
-            agents, targets, on_file_progress=atr_file_progress
+            agents,
+            targets,
+            on_file_progress=atr_file_progress,
+            should_cancel=self._is_cancelled,
         )
         if self._cancelled:
             return {"cancelled": True}
@@ -89,8 +100,10 @@ class ScanOrchestrator:
         progress("cve", 80, "正在匹配组件漏洞…", counts)
         if simulate_delay:
             time.sleep(0.4)
+        if self._cancelled:
+            return {"cancelled": True}
         deps = [a for a in assets if a.type == AssetType.DEPENDENCY.value]
-        cve_findings, cve_status = self.cve.scan(deps)
+        cve_findings, cve_status = self.cve.scan(deps, should_cancel=self._is_cancelled)
         if self._cancelled:
             return {"cancelled": True}
 
@@ -103,6 +116,7 @@ class ScanOrchestrator:
             duration_seconds=max(1, int(time.time() - t0)),
             scope=scope,
             cve_status=cve_status,
+            cve_scanned_count=len(deps),
         )
         snapshot = self.reporter.build_snapshot(
             meta, agents, assets, exposure_findings, cve_findings

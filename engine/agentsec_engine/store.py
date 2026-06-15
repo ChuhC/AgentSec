@@ -105,5 +105,33 @@ class SnapshotStore:
             self._conn.commit()
         return snap
 
+    def patch_agent_discovery(
+        self, agent_id: str, agent_dict: dict, assets: list,
+        cve_findings: Optional[list] = None,
+    ) -> Optional[dict]:
+        """单 Agent 资产刷新：更新 agent 字段并替换该 agent 的资产列表。"""
+        snap = self.load()
+        if not snap:
+            return None
+        agents = snap.get("agents", [])
+        found = False
+        for i, a in enumerate(agents):
+            if a.get("id") == agent_id:
+                agents[i] = {**a, **agent_dict}
+                found = True
+                break
+        if not found:
+            agents.append(agent_dict)
+        snap["agents"] = agents
+        snap["assets"] = [
+            a for a in snap.get("assets", []) if a.get("agent_id") != agent_id
+        ] + assets
+        if cve_findings is not None:
+            snap["cve_findings"] = [
+                f for f in snap.get("cve_findings", [])
+                if agent_id not in f.get("agent_ids", [])
+            ] + cve_findings
+        return self.write_full(snap)
+
     def close(self) -> None:
         self._conn.close()

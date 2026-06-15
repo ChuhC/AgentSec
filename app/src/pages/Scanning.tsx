@@ -5,7 +5,9 @@ import { IconFile, IconScan, IconShield } from "../components/Icons";
 function Ring({ percent }: { percent: number }) {
   const r = 92;
   const c = 2 * Math.PI * r;
-  const off = c * (1 - percent / 100);
+  const done = percent >= 100;
+  const shown = Math.min(100, Math.max(0, Math.round(percent)));
+  const off = done ? 0 : c * (1 - shown / 100);
   return (
     <svg width="220" height="220" viewBox="0 0 220 220">
       <circle cx="110" cy="110" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="12" />
@@ -16,9 +18,9 @@ function Ring({ percent }: { percent: number }) {
         fill="none"
         stroke="url(#pg)"
         strokeWidth="12"
-        strokeLinecap="round"
-        strokeDasharray={c}
-        strokeDashoffset={off}
+        strokeLinecap={done ? "butt" : "round"}
+        strokeDasharray={done ? undefined : c}
+        strokeDashoffset={done ? undefined : off}
         transform="rotate(-90 110 110)"
         style={{ transition: "stroke-dashoffset 0.4s ease" }}
       />
@@ -29,20 +31,21 @@ function Ring({ percent }: { percent: number }) {
         </linearGradient>
       </defs>
       <text x="110" y="104" textAnchor="middle" fontSize="46" fontWeight="800" fill="#fff">
-        {percent}%
+        {shown}%
       </text>
       <text x="110" y="134" textAnchor="middle" fontSize="14" fill="#a59fc0">
-        {percent > 0 ? "扫描中..." : "准备中..."}
+        {done ? "完成" : shown > 0 ? "扫描中..." : "准备中..."}
       </text>
     </svg>
   );
 }
 
 export function Scanning() {
-  const { progress, cancelScan } = useApp();
+  const { progress, cancelScan, scanState } = useApp();
   const percent = progress?.percent ?? 0;
   const stage = progress?.stage ?? "";
   const hasProgress = progress != null;
+  const cancelling = scanState === "cancelling";
 
   // 三阶段状态（无进度事件前全部等待，避免误显示「进行中」）
   const stageState = (key: string): "done" | "active" | "wait" => {
@@ -95,8 +98,13 @@ export function Scanning() {
           />
         </div>
 
-        <button className="btn btn-ghost" style={{ marginTop: 44, padding: "12px 40px" }} onClick={cancelScan}>
-          取消扫描
+        <button
+          className="btn btn-ghost"
+          style={{ marginTop: 44, padding: "12px 40px" }}
+          disabled={cancelling}
+          onClick={cancelScan}
+        >
+          {cancelling ? "正在取消…" : "取消扫描"}
         </button>
       </div>
     </main>

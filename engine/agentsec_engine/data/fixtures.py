@@ -46,6 +46,8 @@ def build_agents():
             name="Hermes Agent",
             kind="hermes",
             version="v1.2.0",
+            latest_version="v1.3.0",
+            listen_ports=["8080"],
             enabled=True,
             description="通用智能体，擅长任务规划与工具调用",
             permissions=[
@@ -59,6 +61,8 @@ def build_agents():
             name="OpenClaw",
             kind="openclaw",
             version="v0.9.1",
+            latest_version="v0.9.1",
+            listen_ports=["18789"],
             enabled=True,
             description="安全研究专用智能体，专注漏洞分析与利用",
             permissions=[
