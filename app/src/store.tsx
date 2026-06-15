@@ -7,19 +7,32 @@ import React, {
   useRef,
   useState,
 } from "react";
-import type { ProgressData, ScanSnapshot } from "./types";
+import type { AgentRuntime, ProgressData, ScanSnapshot, Severity } from "./types";
 
 export type Route =
   | { name: "scan-home" }
   | { name: "scanning" }
   | { name: "results" }
+  | {
+      name: "threat-list";
+      findingId?: string;
+      severity?: Severity;
+      category?: string;
+      agentId?: string;
+    }
+  | {
+      name: "vuln-list";
+      componentId?: string;
+      severity?: Severity;
+      agentId?: string;
+    }
   | { name: "exposure-detail"; findingId?: string }
   | { name: "cve-detail"; componentId?: string }
   | { name: "agent-list" }
   | { name: "agent-workbench"; agentId: string; tab?: string; focusSource?: string }
   | { name: "settings" };
 
-export type ScanState = "idle" | "scanning" | "done" | "error";
+export type ScanState = "idle" | "scanning" | "cancelling" | "done" | "error";
 
 export interface Settings {
   language: string;
@@ -45,6 +58,8 @@ interface AppState {
   disableAsset: (id: string) => Promise<void>;
   enableAsset: (id: string) => Promise<void>;
   uninstallAsset: (id: string) => Promise<void>;
+  refreshAgentAssets: (agentId: string) => Promise<void>;
+  fetchAgentRuntime: (agentId: string) => Promise<AgentRuntime | null>;
   lastError: string | null;
   clearError: () => void;
 }
@@ -100,6 +115,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const bind = () => {
       if (!window.agentsec) return false;
       off = window.agentsec.onEvent(({ event, data }) => {
+        if (import.meta.env.DEV && event === "progress") {
+          console.log("[ui] progress", data?.percent, data?.label);
+        }
         if (event === "progress") {
           setProgress(data as ProgressData);
         } else if (event === "scan.completed") {
@@ -152,9 +170,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const cancelScan = useCallback(async () => {
     try {
+      setScanState("cancelling");
       await window.agentsec.request("scan.cancel");
-    } catch {
-      /* ignore */
+    } catch (e: any) {
+      setScanState("scanning");
+      setLastError(e?.message || "取消扫描失败");
     }
   }, []);
 
@@ -169,6 +189,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     []
   );
+
+  const refreshAgentAssets = useCallback(async (agentId: string) => {
+    try {
+      const res = await window.agentsec.request("agent.refresh", { agentId });
+      if (res?.snapshot) setSnapshot(res.snapshot);
+    } catch (e: any) {
+      setLastError(e?.message || "刷新资产失败");
+    }
+  }, []);
+
+  const fetchAgentRuntime = useCallback(async (agentId: string) => {
+    try {
+      const res = await window.agentsec.request("agent.runtime.get", { agentId });
+      return (res?.runtime as AgentRuntime) ?? null;
+    } catch (e: any) {
+      setLastError(e?.message || "获取资源占用失败");
+      return null;
+    }
+  }, []);
 
   const value: AppState = useMemo(
     () => ({
@@ -186,10 +225,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       disableAsset: (id) => doAssetOp("asset.disable", id),
       enableAsset: (id) => doAssetOp("asset.enable", id),
       uninstallAsset: (id) => doAssetOp("asset.uninstall", id),
+      refreshAgentAssets,
+      fetchAgentRuntime,
       lastError,
       clearError,
     }),
-    [route, snapshot, scanState, progress, scanError, settings, lastError]
+    [route, snapshot, scanState, progress, scanError, settings, lastError, refreshAgentAssets, fetchAgentRuntime]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

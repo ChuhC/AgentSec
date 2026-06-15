@@ -5,7 +5,7 @@
   - OpenClawAuditCollector: wrap `openclaw security audit --json`（占位）
 
 MVP 规则子集（见 docs/engine/atr-mvp-rules.md）：
-  status == stable 且 scan_target ∈ {mcp, skill, both}，约 18 条，覆盖
+  status == stable 且 scan_target ∈ {mcp, skill, both}，约 16 条（排除 2 条高误报），覆盖
   prompt-injection / tool-poisoning / context-exfiltration / agent-manipulation /
   skill-compromise / privilege-escalation / model-abuse 等类别。
 
@@ -19,7 +19,7 @@ import os
 import re
 import shutil
 import subprocess
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ..models import Agent, ExposureFinding, FindingSource, Severity
 
@@ -32,8 +32,20 @@ except Exception:  # noqa: BLE001
 
 _STATIC_TARGETS = {"mcp", "skill", "both"}
 
+# MVP 排除：对 SKILL.md 静态扫描误报率过高的宽泛规则（见 docs/engine/atr-mvp-rules.md）
+# ATR-2026-00001 — Indirect Prompt Injection via External Content：正常 skill 文档常描述外部输入
+# ATR-2026-00030 — Cross-Agent Attack Detection：多 agent 协作文档触发面过宽
+_EXCLUDED_RULE_IDS = frozenset({
+    "ATR-2026-00001",
+    "ATR-2026-00030",
+})
+
 # 单文件喂给 ATR 的最大字符数（性能护栏；注入特征通常靠前）
 _MAX_SCAN_CHARS = 65536
+
+# SKILL.md YAML frontmatter 剥离（--- ... ---），避免元数据 boilerplate 误报
+_FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n?", re.DOTALL)
+_MIN_SKILL_BODY_CHARS = 32
 
 # ATR 类别（kebab）→ agentSec 中文类别
 _CAT_ZH = {
@@ -86,6 +98,13 @@ def _map_severity(atr_sev: str) -> str:
     return Severity.LOW.value
 
 
+def _preprocess_skill_text(path: str, text: str) -> str:
+    """剥离 SKILL.md YAML frontmatter，仅扫描正文。"""
+    if not path.endswith("SKILL.md"):
+        return text
+    return _FRONTMATTER_RE.sub("", text, count=1).strip()
+
+
 def _locate(text: str, patterns) -> Tuple[str, str]:
     """用命中的正则在原文中定位真实片段与行号，作为证据。
 
@@ -127,6 +146,7 @@ class ATREngine:
                 status == "stable" or (include_experimental and status == "experimental")
             ):
                 self._subset_ids.add(r.id)
+        self._subset_ids -= _EXCLUDED_RULE_IDS
         # 性能：原地裁剪真实规则列表，让 evaluate 只跑 MVP 子集（459 → ~18），
         # 对大量真实 SKILL.md 全量扫描提速约 7x（详见 atr-mvp-rules.md）。
         try:
@@ -164,7 +184,8 @@ class ATREngine:
         category = tags.get("category", "")
         cat_zh = _CAT_ZH.get(category, "暴露面")
         loc_suffix, snippet = _locate(text, getattr(m, "matched_patterns", None))
-        evidence = path + loc_suffix
+        loc = path + loc_suffix
+        evidence = loc
         if snippet:
             evidence += "\n命中片段：" + snippet
         impact = getattr(m, "description", None) or (
@@ -181,7 +202,8 @@ class ATREngine:
             evidence=evidence,
             recommendation=_CAT_RECO.get(category, "请核查该来源内容并降低暴露面。"),
             plain_explanation=_CAT_PLAIN.get(category, "检测到一处可能的安全风险，建议核查。"),
-            location=evidence.split("\n")[0],
+            location=loc,
+            locations=[loc] if loc else [],
             tags=[t for t in [category, tags.get("subcategory")] if t],
         )
 
@@ -266,6 +288,7 @@ class OpenClawAuditCollector:
                 or "参考 OpenClaw 官方审计建议处理该项。",
                 plain_explanation="OpenClaw 官方安全审计发现的一处基线问题，建议按建议处理。",
                 location=location,
+                locations=[location] if location else [],
                 tags=["openclaw-audit"],
             ))
         return out
@@ -290,10 +313,13 @@ class ExposureDetector:
         agents: List[Agent],
         targets: List[ScanTarget],
         on_file_progress: Optional[Callable[[int, int], None]] = None,
+        should_cancel: Optional[Callable[[], bool]] = None,
     ) -> List[ExposureFinding]:
         findings: List[ExposureFinding] = []
         total = len(targets)
         for i, t in enumerate(targets):
+            if should_cancel and should_cancel():
+                break
             try:
                 with open(t.path, "r", encoding="utf-8", errors="ignore") as f:
                     text = f.read()
@@ -301,11 +327,20 @@ class ExposureDetector:
                 if on_file_progress:
                     on_file_progress(i + 1, total)
                 continue
+            text = _preprocess_skill_text(t.path, text)
+            if t.path.endswith("SKILL.md") and len(text) < _MIN_SKILL_BODY_CHARS:
+                if on_file_progress:
+                    on_file_progress(i + 1, total)
+                continue
             findings.extend(self.atr.scan_file(t.path, text, t.source, t.agent_ids))
             if on_file_progress:
                 on_file_progress(i + 1, total)
+        if should_cancel and should_cancel():
+            return findings
         # 仅对已发现的真实 OpenClaw Agent 跑官方 audit（需 openclaw CLI；claw3d 不算）
         for agent in agents:
+            if should_cancel and should_cancel():
+                break
             if agent.kind == "openclaw":
                 findings.extend(self.audit.collect(agent))
         return findings

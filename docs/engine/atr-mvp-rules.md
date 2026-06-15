@@ -18,7 +18,18 @@
 | **运行时** | pyatr 需 **Python ≥ 3.10**；引擎跑在 `engine/.venv`（3.11） |
 | **CVE** | **不在 ATR**；由 `CVEDetector` + OSV 单独处理 |
 | **OpenClaw 补充** | `openclaw security audit --json`（占位，待接入） |
-| **MVP 规则子集** | `status=stable` 且 `tags.scan_target ∈ {mcp, skill, both}` ⇒ **18 条**（静态可扫目标）|
+| **MVP 规则子集** | `status=stable` 且 `tags.scan_target ∈ {mcp, skill, both}` ⇒ **16 条**（排除 2 条高误报规则，见 §2.1）|
+
+### 2.1 MVP 排除规则（静态 SKILL 扫描）
+
+以下规则在 `ATREngine` 中通过 `_EXCLUDED_RULE_IDS` 剔除，避免正常 skill 文档大面积误报：
+
+| rule_id | 名称 | 排除原因 |
+|---------|------|----------|
+| `ATR-2026-00001` | Indirect Prompt Injection via External Content | 正常 skill 常描述外部输入/引用 |
+| `ATR-2026-00030` | Cross-Agent Attack Detection | 多 agent 协作文档触发面过宽 |
+
+扫描前对 `SKILL.md` 剥离 YAML frontmatter（`--- … ---`），正文过短（&lt;32 字符）则跳过。
 
 ### 实测 API（pyatr 0.2.6）
 
@@ -87,7 +98,7 @@ matches = engine.evaluate(ev)   # → ATRMatch(rule_id, title, severity, confide
 | 文件路径 + 行 | `location`；`source` = skill \| mcp \| agent_config \| openclaw_audit |
 | `message` / `response.message_template` | `title` + `impact`（Reporter 脱敏后落盘） |
 
-**去重键：** `(source, check_id, path, line)`
+**去重键：** `(source, rule_id)` — Reporter 聚合同规则多文件命中；`locations[]` 保留全部路径，`evidence` 合并前 3 条。
 
 ---
 
@@ -105,8 +116,8 @@ matches = engine.evaluate(ev)   # → ATRMatch(rule_id, title, severity, confide
 ## 6. 实施进度
 
 - [x] **ATREngine 封装** `engine/agentsec_engine/detectors/exposure.py`：`load_bundled_rules` →
-      MVP 子集过滤（18 条）→ `scan_file` 静态评估 → 映射为 `ExposureFinding`
-- [x] **子集口径**：`stable` + `scan_target∈{mcp,skill,both}`；可选 `include_experimental=True` 扩展
+      MVP 子集过滤（16 条，排除 2 条高误报）→ `scan_file` 静态评估 → 映射为 `ExposureFinding`
+- [x] **子集口径**：`stable` + `scan_target∈{mcp,skill,both}` − `_EXCLUDED_RULE_IDS`；可选 `include_experimental=True` 扩展
 - [x] **样例驱动**：`data/samples/`（Hermes/OpenClaw 的 mcp.json + SKILL.md）让真实 ATR 跑出
       `ATR-2026-NNNNN` 命中（含真实行号定位）
 - [x] **映射**：severity（critical/high→高，medium→中，其余→低）、category→中文、

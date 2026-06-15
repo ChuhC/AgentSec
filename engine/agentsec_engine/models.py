@@ -111,6 +111,8 @@ class Agent:
     version: str
     enabled: bool = True
     description: str = ""
+    latest_version: Optional[str] = None
+    listen_ports: List[str] = field(default_factory=list)
     # Agent 配置级别的默认权限（权限雷达/弹窗的「Agent 配置」分组）
     permissions: List[PermissionEntry] = field(default_factory=list)
 
@@ -132,11 +134,16 @@ class ExposureFinding:
     evidence: str = ""  # 证据（已脱敏）
     recommendation: str = ""  # 推荐操作
     plain_explanation: str = ""  # 通俗说明（给普通用户）
-    location: str = ""  # 文件路径:行
+    location: str = ""  # 主位置（首条命中，向后兼容）
+    locations: List[str] = field(default_factory=list)  # 全部命中路径
     tags: List[str] = field(default_factory=list)  # owasp_agentic 等
 
     def to_dict(self) -> Dict:
-        return asdict(self)
+        d = asdict(self)
+        # 旧快照无 locations 时由 location 回填
+        if not d.get("locations") and d.get("location"):
+            d["locations"] = [d["location"]]
+        return d
 
 
 @dataclass
@@ -174,6 +181,7 @@ class ScanMeta:
     duration_seconds: int = 0
     scope: str = "本机全部"
     cve_status: str = CVEStatus.OK.value
+    cve_scanned_count: int = 0
 
     def to_dict(self) -> Dict:
         return asdict(self)

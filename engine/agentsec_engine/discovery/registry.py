@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
+from ..enrichment import enrich_discovery
 from ..models import Agent, Asset
 from .base import AgentAdapter
 from .hermes import HermesAdapter
@@ -11,9 +12,44 @@ from .openclaw import OpenClawAdapter
 
 ADAPTERS = [HermesAdapter, OpenClawAdapter]
 
+_ADAPTER_BY_KIND = {cls.kind: cls for cls in ADAPTERS}
+
+
+def _adapter_homes(scope_path: Optional[str]) -> Dict[str, str]:
+    homes: Dict[str, str] = {}
+    for cls in ADAPTERS:
+        adapter: AgentAdapter = cls(scope_path=scope_path)
+        home = adapter.resolve_home()
+        if home:
+            homes[cls.kind] = home
+    return homes
+
+
+def discover_agent(
+    agent_id: str,
+    scope_path: Optional[str] = None,
+    online: bool = True,
+) -> tuple:
+    """重新发现单个 Agent，返回 (agent, assets, status)。"""
+    cls = _ADAPTER_BY_KIND.get(agent_id)
+    if cls is None:
+        return None, [], "unknown_agent"
+    adapter: AgentAdapter = cls(scope_path=scope_path)
+    try:
+        agent = adapter.detect()
+        if agent is None:
+            return None, [], "not_found"
+        assets = adapter.discover_assets(agent)
+        homes = {agent.id: adapter.resolve_home()} if adapter.resolve_home() else {}
+        enrich_discovery([agent], assets, homes=homes, online=online)
+        return agent, assets, "ok"
+    except Exception as exc:  # noqa: BLE001
+        return None, [], "error: " + str(exc)
+
 
 def discover_all(
     scope_path: Optional[str] = None,
+    online: bool = True,
 ) -> Tuple[List[Agent], List[Asset], List[Tuple[str, str, List[str]]], dict]:
     """运行所有 Adapter，返回 (agents, assets, atr_targets, adapter_status)。
 
@@ -24,6 +60,7 @@ def discover_all(
     assets: List[Asset] = []
     targets: List[Tuple[str, str, List[str]]] = []
     status: dict = {}
+    homes = _adapter_homes(scope_path)
     for cls in ADAPTERS:
         adapter: AgentAdapter = cls(scope_path=scope_path)
         try:
@@ -38,4 +75,5 @@ def discover_all(
             status[cls.kind] = "ok"
         except Exception as exc:  # noqa: BLE001 - 隔离单 Adapter 失败
             status[cls.kind] = "error: " + str(exc)
+    enrich_discovery(agents, assets, homes=homes, online=online)
     return agents, assets, targets, status

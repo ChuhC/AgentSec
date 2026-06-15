@@ -53,6 +53,38 @@ export const IconShield = ({ size = 18, className, style }: P) => (
   </svg>
 );
 
+/** 盾牌 + 感叹号/信息符号（风险等级小卡） */
+export const IconShieldBadge = ({
+  size = 24,
+  className,
+  style,
+  symbol = "alert",
+}: P & { symbol?: "alert" | "info" }) => (
+  <svg
+    viewBox="0 0 24 24"
+    style={{ ...s(size), ...style }}
+    className={className}
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    {symbol === "info" ? (
+      <>
+        <circle cx="12" cy="9" r="0.9" fill="currentColor" stroke="none" />
+        <path d="M12 12v4" />
+      </>
+    ) : (
+      <>
+        <path d="M12 8v4.5" />
+        <circle cx="12" cy="16" r="0.85" fill="currentColor" stroke="none" />
+      </>
+    )}
+  </svg>
+);
+
 export const IconCube = ({ size = 18, className }: P) => (
   <svg viewBox="0 0 24 24" style={s(size)} className={className} fill="none"
     stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">

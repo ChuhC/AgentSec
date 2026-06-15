@@ -40,9 +40,24 @@ export interface Agent {
   name: string;
   kind: string;
   version: string;
+  latest_version?: string | null;
+  listen_ports?: string[];
   enabled: boolean;
   description: string;
   permissions: PermissionEntry[];
+}
+
+export interface AgentRuntime {
+  agent_id: string;
+  cpu_percent: number;
+  memory_mb: number;
+  memory_percent: number;
+  disk_mb: number;
+  disk_percent: number;
+  listen_ports: string[];
+  cpu_history: number[];
+  memory_history: number[];
+  disk_history: number[];
 }
 
 export interface ExposureFinding {
@@ -57,6 +72,7 @@ export interface ExposureFinding {
   recommendation: string;
   plain_explanation: string;
   location: string;
+  locations?: string[];
   tags: string[];
 }
 
@@ -86,6 +102,7 @@ export interface ScanMeta {
   duration_seconds: number;
   scope: string;
   cve_status: "ok" | "unavailable";
+  cve_scanned_count?: number;
 }
 
 export interface ScanSnapshot {

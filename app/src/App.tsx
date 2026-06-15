@@ -4,8 +4,8 @@ import { useApp } from "./store";
 import { ScanHome } from "./pages/ScanHome";
 import { Scanning } from "./pages/Scanning";
 import { Results } from "./pages/Results";
-import { ExposureDetail } from "./pages/ExposureDetail";
-import { ComponentDetail } from "./pages/ComponentDetail";
+import { ThreatList } from "./pages/ThreatList";
+import { VulnList } from "./pages/VulnList";
 import { AgentList } from "./pages/AgentList";
 import { AgentWorkbench } from "./pages/AgentWorkbench";
 import { Settings } from "./pages/Settings";
@@ -24,11 +24,30 @@ export function App() {
     case "results":
       page = <Results />;
       break;
+    case "threat-list":
+      page = (
+        <ThreatList
+          findingId={route.findingId}
+          severity={route.severity}
+          category={route.category}
+          agentId={route.agentId}
+        />
+      );
+      break;
+    case "vuln-list":
+      page = (
+        <VulnList
+          componentId={route.componentId}
+          severity={route.severity}
+          agentId={route.agentId}
+        />
+      );
+      break;
     case "exposure-detail":
-      page = <ExposureDetail findingId={route.findingId} />;
+      page = <ThreatList findingId={route.findingId} />;
       break;
     case "cve-detail":
-      page = <ComponentDetail componentId={route.componentId} />;
+      page = <VulnList componentId={route.componentId} />;
       break;
     case "agent-list":
       page = <AgentList />;

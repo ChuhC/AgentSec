@@ -82,7 +82,7 @@ export function ConfirmModal({
 }) {
   return (
     <div className="modal-mask" onClick={onCancel}>
-      <div className="modal" style={{ width: 400 }} onClick={(e) => e.stopPropagation()}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title">{title}</div>
           <button className="modal-close" onClick={onCancel}>
