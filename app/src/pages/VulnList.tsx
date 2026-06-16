@@ -258,12 +258,11 @@ function ComponentModal({
   const selected: CVEItem | undefined = selCve
     ? row.cves.find((c) => c.cve_id === selCve)
     : undefined;
-  const split = !!selected;
 
   return (
     <div className="modal-mask" onClick={onClose}>
       <div
-        className={`modal cve-detail-modal${split ? " cve-detail-modal-split" : ""}`}
+        className="modal cve-detail-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
@@ -289,7 +288,7 @@ function ComponentModal({
           <Meta label="修复版本" value={row.fixedVersion || "—"} />
         </div>
 
-        <div className={`cve-modal-body${split ? " is-split" : ""}`}>
+        <div className="cve-modal-body cve-modal-body-stack">
           <div className="cve-modal-list">
             <div className="cve-modal-list-head">CVE 列表</div>
             <div className="cve-modal-cve-rows">
@@ -304,9 +303,7 @@ function ComponentModal({
                   </span>
                   <SeverityPill sev={v.severity} />
                   <span style={{ fontWeight: 700, fontSize: 13 }}>{v.cvss.toFixed(1)}</span>
-                  {!split && (
-                    <span className="muted cve-modal-cve-summary">{v.summary}</span>
-                  )}
+                  <span className="muted cve-modal-cve-summary">{v.summary}</span>
                   <IconChevron
                     size={14}
                     className="dim"
@@ -320,8 +317,8 @@ function ComponentModal({
             </div>
           </div>
 
-          {split && selected && (
-            <div className="cve-modal-detail">
+          {selected && (
+            <div className="cve-modal-detail cve-modal-detail-stack">
               <div className="cve-modal-list-head">漏洞详情</div>
               <div className="cve-modal-detail-body">
                 <div className="row" style={{ gap: 10, marginBottom: 12 }}>

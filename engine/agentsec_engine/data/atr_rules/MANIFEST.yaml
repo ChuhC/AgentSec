@@ -1,20 +1,30 @@
-# agentSec MVP ATR 规则子集 —— 实测口径
+# agentSec ATR 规则子集 —— 实测口径
 #
 # 接入 pyatr 0.2.6 后，规则由 `pyatr.ATREngine.load_bundled_rules()` 提供（内置 459 条，
 # Layer 1 = regex/pattern），无需在本目录维护 YAML 拷贝。
 #
-# MVP 子集由 ExposureDetector 在运行时按以下条件动态过滤：
-#   status == "stable"  且  tags.scan_target ∈ {mcp, skill, both}
-# 当前解析得到 18 条（随 pyatr 版本可能变化）。
+# 默认子集（ExposureDetector high_severity_only=True, include_experimental=True）：
+#   status ∈ {stable, experimental}
+#   severity ∈ {critical, high, medium}
+#   tags.scan_target ∈ {mcp, skill, both}
+#   experimental 的 critical/high 另需 tags.confidence ∈ {high, medium-high}
+#   medium 严重度的 experimental 规则全量纳入（不要求 confidence）
+#   排除 _EXCLUDED_RULE_IDS（2 条高误报）
+# 当前解析约 276 条（随 pyatr 版本可能变化）。
 #
-# 如需扩展覆盖（补 medium/low 与更多类别）：ExposureDetector(include_experimental=True)
+# Legacy 最小子集：include_experimental=False, high_severity_only=False → ~16 条 stable。
 
-version: 1
+version: 2
 engine: pyatr>=0.2.6
 selection:
-  status: [stable]
+  status: [stable, experimental]
+  severity: [critical, high, medium]
   scan_target: [mcp, skill, both]
-resolved_subset_size: 18
+  experimental_confidence: [high, medium-high]
+  excluded_rule_ids:
+    - ATR-2026-00001
+    - ATR-2026-00030
+resolved_subset_size: 276
 categories_covered:
   - prompt-injection
   - tool-poisoning
@@ -23,4 +33,6 @@ categories_covered:
   - skill-compromise
   - privilege-escalation
   - model-abuse
+  - excessive-autonomy
+  - data-poisoning
 note: scan_target=agent_config 及 llm/llm_io/runtime 目标暂不纳入（需运行时数据或非静态）。

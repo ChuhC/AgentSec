@@ -5,9 +5,9 @@
   - OpenClawAuditCollector: wrap `openclaw security audit --json`（占位）
 
 MVP 规则子集（见 docs/engine/atr-mvp-rules.md）：
-  status == stable 且 scan_target ∈ {mcp, skill, both}，约 16 条（排除 2 条高误报），覆盖
-  prompt-injection / tool-poisoning / context-exfiltration / agent-manipulation /
-  skill-compromise / privilege-escalation / model-abuse 等类别。
+  默认启用 stable + experimental 中 severity∈{critical,high,medium}、可静态扫描目标
+  （mcp/skill/both）的规则，约 276 条（排除 2 条高误报）；experimental 的 critical/high
+  另要求 confidence∈{high, medium-high}，medium 严重度 experimental 全量纳入。
 
 pyatr 需 Python ≥ 3.10；导入失败时（如 3.8）自动降级，由上层回落到 fixture。
 """
@@ -22,6 +22,7 @@ import subprocess
 from typing import Callable, Dict, List, Optional, Tuple
 
 from ..models import Agent, ExposureFinding, FindingSource, Severity
+from ..threat_whitelist import is_whitelisted_path
 
 try:  # pyatr 仅在 3.10+ 可用
     from pyatr import ATREngine as _PyATR, AgentEvent as _AgentEvent
@@ -31,6 +32,11 @@ except Exception:  # noqa: BLE001
     _PYATR_OK = False
 
 _STATIC_TARGETS = {"mcp", "skill", "both"}
+
+# 纳入 critical / high / medium（不含 low/info）
+_SEV_INCLUDED = frozenset({"critical", "high", "medium"})
+# experimental 规则额外要求较高置信度，控制误报
+_CONF_INCLUDED = frozenset({"high", "medium-high"})
 
 # MVP 排除：对 SKILL.md 静态扫描误报率过高的宽泛规则（见 docs/engine/atr-mvp-rules.md）
 # ATR-2026-00001 — Indirect Prompt Injection via External Content：正常 skill 文档常描述外部输入
@@ -125,10 +131,44 @@ def _locate(text: str, patterns) -> Tuple[str, str]:
     return ("", "")
 
 
-class ATREngine:
-    """pyATR 封装：加载内置规则，按 MVP 子集过滤后对文件文本静态评估。"""
+def _rule_in_subset(
+    rule,
+    *,
+    include_experimental: bool,
+    high_severity_only: bool,
+) -> bool:
+    """是否纳入当前扫描子集。"""
+    tags = getattr(rule, "tags", None) or {}
+    if tags.get("scan_target") not in _STATIC_TARGETS:
+        return False
+    status = getattr(rule, "status", None)
+    if status == "stable":
+        pass
+    elif status == "experimental" and include_experimental:
+        pass
+    else:
+        return False
+    if high_severity_only:
+        sev = (getattr(rule, "severity", None) or "").lower()
+        if sev not in _SEV_INCLUDED:
+            return False
+        if (
+            status == "experimental"
+            and sev in ("critical", "high")
+            and tags.get("confidence") not in _CONF_INCLUDED
+        ):
+            return False
+    return True
 
-    def __init__(self, include_experimental: bool = False):
+
+class ATREngine:
+    """pyATR 封装：加载内置规则，按子集过滤后对文件文本静态评估。"""
+
+    def __init__(
+        self,
+        include_experimental: bool = True,
+        high_severity_only: bool = True,
+    ):
         self.available = _PYATR_OK
         self._engine = None
         self._subset_ids = set()
@@ -139,16 +179,14 @@ class ATREngine:
         self._engine.load_bundled_rules()
         for r in self._engine.rules:
             self._rule_by_id[r.id] = r
-            tags = getattr(r, "tags", None) or {}
-            target = tags.get("scan_target")
-            status = getattr(r, "status", None)
-            if target in _STATIC_TARGETS and (
-                status == "stable" or (include_experimental and status == "experimental")
+            if _rule_in_subset(
+                r,
+                include_experimental=include_experimental,
+                high_severity_only=high_severity_only,
             ):
                 self._subset_ids.add(r.id)
         self._subset_ids -= _EXCLUDED_RULE_IDS
-        # 性能：原地裁剪真实规则列表，让 evaluate 只跑 MVP 子集（459 → ~18），
-        # 对大量真实 SKILL.md 全量扫描提速约 7x（详见 atr-mvp-rules.md）。
+        # 性能：原地裁剪规则列表，evaluate 只跑子集（459 → ~276，详见 atr-mvp-rules.md）。
         try:
             self._engine._rules[:] = [
                 r for r in self._engine._rules if r.id in self._subset_ids
@@ -304,8 +342,16 @@ class ScanTarget:
 
 
 class ExposureDetector:
-    def __init__(self, rules_dir: Optional[str] = None, include_experimental: bool = False):
-        self.atr = ATREngine(include_experimental=include_experimental)
+    def __init__(
+        self,
+        rules_dir: Optional[str] = None,
+        include_experimental: bool = True,
+        high_severity_only: bool = True,
+    ):
+        self.atr = ATREngine(
+            include_experimental=include_experimental,
+            high_severity_only=high_severity_only,
+        )
         self.audit = OpenClawAuditCollector()
 
     def scan(
@@ -320,6 +366,10 @@ class ExposureDetector:
         for i, t in enumerate(targets):
             if should_cancel and should_cancel():
                 break
+            if is_whitelisted_path(t.path):
+                if on_file_progress:
+                    on_file_progress(i + 1, total)
+                continue
             try:
                 with open(t.path, "r", encoding="utf-8", errors="ignore") as f:
                     text = f.read()

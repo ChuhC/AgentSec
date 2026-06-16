@@ -60,6 +60,9 @@ interface AppState {
   uninstallAsset: (id: string) => Promise<void>;
   refreshAgentAssets: (agentId: string) => Promise<void>;
   fetchAgentRuntime: (agentId: string) => Promise<AgentRuntime | null>;
+  ignoreThreat: (findingKey: string) => Promise<void>;
+  unignoreThreat: (findingKey: string) => Promise<void>;
+  readFile: (path: string) => Promise<{ path: string; content: string; truncated: boolean }>;
   lastError: string | null;
   clearError: () => void;
 }
@@ -209,6 +212,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const ignoreThreat = useCallback(async (findingKey: string) => {
+    try {
+      const res = await window.agentsec.request("threat.ignore", { findingKey });
+      if (res?.snapshot) setSnapshot(res.snapshot);
+    } catch (e: any) {
+      setLastError(e?.message || "忽略威胁失败");
+    }
+  }, []);
+
+  const unignoreThreat = useCallback(async (findingKey: string) => {
+    try {
+      const res = await window.agentsec.request("threat.unignore", { findingKey });
+      if (res?.snapshot) setSnapshot(res.snapshot);
+    } catch (e: any) {
+      setLastError(e?.message || "取消忽略失败");
+    }
+  }, []);
+
+  const readFile = useCallback(async (path: string) => {
+    try {
+      const res = await window.agentsec.request("file.read", { path });
+      return res as { path: string; content: string; truncated: boolean };
+    } catch (e: any) {
+      setLastError(e?.message || "读取文件失败");
+      throw e;
+    }
+  }, []);
+
   const value: AppState = useMemo(
     () => ({
       route,
@@ -227,10 +258,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       uninstallAsset: (id) => doAssetOp("asset.uninstall", id),
       refreshAgentAssets,
       fetchAgentRuntime,
+      ignoreThreat,
+      unignoreThreat,
+      readFile,
       lastError,
       clearError,
     }),
-    [route, snapshot, scanState, progress, scanError, settings, lastError, refreshAgentAssets, fetchAgentRuntime]
+    [route, snapshot, scanState, progress, scanError, settings, lastError, refreshAgentAssets, fetchAgentRuntime, ignoreThreat, unignoreThreat, readFile]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -18,7 +18,8 @@
 | **运行时** | pyatr 需 **Python ≥ 3.10**；引擎跑在 `engine/.venv`（3.11） |
 | **CVE** | **不在 ATR**；由 `CVEDetector` + OSV 单独处理 |
 | **OpenClaw 补充** | `openclaw security audit --json`（占位，待接入） |
-| **MVP 规则子集** | `status=stable` 且 `tags.scan_target ∈ {mcp, skill, both}` ⇒ **16 条**（排除 2 条高误报规则，见 §2.1）|
+| **MVP 规则子集（默认）** | `stable`+`experimental` 且 `severity∈{critical,high,medium}`、`scan_target∈{mcp,skill,both}`；experimental 的 critical/high 另需 `confidence∈{high,medium-high}`，medium 全量纳入 ⇒ **约 276 条**（排除 2 条高误报，见 §2.1）|
+| **Legacy 最小子集** | `include_experimental=False` 且 `high_severity_only=False` ⇒ **约 16 条** stable |
 
 ### 2.1 MVP 排除规则（静态 SKILL 扫描）
 
@@ -116,15 +117,17 @@ matches = engine.evaluate(ev)   # → ATRMatch(rule_id, title, severity, confide
 ## 6. 实施进度
 
 - [x] **ATREngine 封装** `engine/agentsec_engine/detectors/exposure.py`：`load_bundled_rules` →
-      MVP 子集过滤（16 条，排除 2 条高误报）→ `scan_file` 静态评估 → 映射为 `ExposureFinding`
-- [x] **子集口径**：`stable` + `scan_target∈{mcp,skill,both}` − `_EXCLUDED_RULE_IDS`；可选 `include_experimental=True` 扩展
+      默认子集过滤（~276 条，含 medium 全量，排除 2 条高误报）→ `scan_file` 静态评估 → 映射为 `ExposureFinding`
+- [x] **子集口径（默认）**：`stable|experimental` + `severity∈{critical,high,medium}` + 静态 `scan_target`
+      − `_EXCLUDED_RULE_IDS`；experimental 的 critical/high 需 `confidence∈{high,medium-high}`
+- [x] **Legacy 最小子集**：`ExposureDetector(include_experimental=False, high_severity_only=False)` → ~16 条
 - [x] **样例驱动**：`data/samples/`（Hermes/OpenClaw 的 mcp.json + SKILL.md）让真实 ATR 跑出
       `ATR-2026-NNNNN` 命中（含真实行号定位）
 - [x] **映射**：severity（critical/high→高，medium→中，其余→低）、category→中文、
       `matched_patterns` 回溯原文片段+行号作证据、按类别生成中文 `recommendation`/通俗说明
 - [ ] **真实 Adapter 路径**：`atr_targets()` 现返回样例文件，待替换为本机实际 skill/mcp/agent 配置
 - [ ] **OpenClawAuditCollector**：接入 `openclaw security audit --json`
-- [ ] 视需要纳入精选 `experimental` 规则以补齐 medium/low 与更多类别
+- [ ] 视需要纳入 `low/info` 严重度或 `confidence=medium` 的 experimental 规则
 
 ---
 

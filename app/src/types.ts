@@ -112,6 +112,8 @@ export interface ScanSnapshot {
   assets: Asset[];
   exposure_findings: ExposureFinding[];
   cve_findings: CVEFinding[];
+  /** 用户手动忽略的威胁键（source::id） */
+  ignored_threat_keys?: string[];
 }
 
 export interface ProgressData {

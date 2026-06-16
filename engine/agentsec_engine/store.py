@@ -15,6 +15,8 @@ import threading
 from typing import Optional
 
 from .models import ScanSnapshot
+from .paths import safe_normalize_readable_path
+from .threat_whitelist import apply_default_whitelist_to_snapshot
 
 
 def default_data_dir() -> str:
@@ -55,7 +57,18 @@ class SnapshotStore:
 
     def commit_replace(self, snapshot: ScanSnapshot) -> None:
         """扫描完成：覆盖唯一快照。"""
-        payload = json.dumps(snapshot.to_dict(), ensure_ascii=False)
+        snap_dict = snapshot.to_dict()
+        prev = self.load()
+        if prev and prev.get("ignored_threat_keys"):
+            valid = {
+                f"{f.get('source')}::{f.get('id')}"
+                for f in snap_dict.get("exposure_findings", [])
+            }
+            snap_dict["ignored_threat_keys"] = [
+                k for k in prev["ignored_threat_keys"] if k in valid
+            ]
+        apply_default_whitelist_to_snapshot(snap_dict)
+        payload = json.dumps(snap_dict, ensure_ascii=False)
         with self._lock:
             self._conn.execute("DELETE FROM snapshot")
             self._conn.execute(
@@ -64,6 +77,79 @@ class SnapshotStore:
                 (snapshot.schema_version, payload, snapshot.meta.finished_at),
             )
             self._conn.commit()
+
+    @staticmethod
+    def threat_finding_key(source: str, finding_id: str) -> str:
+        return f"{source}::{finding_id}"
+
+    def ignore_threat(self, finding_key: str) -> Optional[dict]:
+        """将威胁加入忽略列表（持久化于快照）。"""
+        snap = self.load()
+        if not snap:
+            return None
+        valid = {
+            self.threat_finding_key(f.get("source", ""), f.get("id", ""))
+            for f in snap.get("exposure_findings", [])
+        }
+        if finding_key not in valid:
+            raise ValueError("未找到该威胁：" + str(finding_key))
+        keys = list(snap.get("ignored_threat_keys") or [])
+        if finding_key not in keys:
+            keys.append(finding_key)
+        snap["ignored_threat_keys"] = keys
+        return self.write_full(snap)
+
+    def unignore_threat(self, finding_key: str) -> Optional[dict]:
+        """从忽略列表移除威胁。"""
+        snap = self.load()
+        if not snap:
+            return None
+        keys = [k for k in (snap.get("ignored_threat_keys") or []) if k != finding_key]
+        snap["ignored_threat_keys"] = keys
+        return self.write_full(snap)
+
+    def collect_allowed_read_paths(self, snap: dict) -> set:
+        """快照内可读取的本地文件路径（realpath）。"""
+        allowed: set = set()
+        for f in snap.get("exposure_findings", []):
+            locs = list(f.get("locations") or [])
+            if f.get("location"):
+                locs.append(f["location"])
+            for loc in locs:
+                if not loc:
+                    continue
+                norm = safe_normalize_readable_path(loc)
+                if norm and os.path.isfile(norm):
+                    allowed.add(norm)
+        for asset in snap.get("assets", []):
+            p = asset.get("path")
+            if not p:
+                continue
+            norm = safe_normalize_readable_path(p)
+            if norm and os.path.isfile(norm):
+                allowed.add(norm)
+        return allowed
+
+    def is_readable_finding_path(self, snap: dict, norm_path: str) -> bool:
+        """请求路径是否在快照暴露面/资产路径白名单内。"""
+        if norm_path in self.collect_allowed_read_paths(snap):
+            return True
+        for f in snap.get("exposure_findings", []):
+            locs = list(f.get("locations") or [])
+            if f.get("location"):
+                locs.append(f["location"])
+            for loc in locs:
+                if not loc:
+                    continue
+                if safe_normalize_readable_path(loc) == norm_path:
+                    return True
+        for asset in snap.get("assets", []):
+            p = asset.get("path")
+            if not p:
+                continue
+            if safe_normalize_readable_path(p) == norm_path:
+                return True
+        return False
 
     def load(self) -> Optional[dict]:
         """读取最近一次快照（dict 形态，直接供 IPC 返回）。"""

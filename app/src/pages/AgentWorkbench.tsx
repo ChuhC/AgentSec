@@ -5,9 +5,11 @@ import { VulnList } from "./VulnList";
 import {
   agentOptimizationSuggestions,
   agentSecurityScore,
+  activeThreatCount,
   assetsByAgent,
   cveForAgent,
   exposureForAgent,
+  isThreatIgnored,
 } from "../selectors";
 import { Radar, RadarAxis } from "../components/Radar";
 import { SeverityPill, ConfirmModal, SEV_LABEL } from "../components/common";
@@ -23,9 +25,10 @@ import {
   IconDatabase,
   IconHexAgent,
   IconChevron,
+  IconLayers,
   IconRefresh,
   IconShield,
-  IconSettings,
+  IconShieldBadge,
 } from "../components/Icons";
 
 const SEV_W: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0, safe: 0 };
@@ -89,7 +92,7 @@ export function AgentWorkbench({
   }
 
   const assets = assetsByAgent(snapshot, agentId);
-  const exposure = exposureForAgent(snapshot, agentId);
+  const activeThreats = activeThreatCount(snapshot, agentId);
   const hue = agent.kind === "openclaw" ? "#60a5fa" : "#a855f7";
 
   const goAssets = (sub: (typeof ASSET_SUB_TABS)[number] = "MCP") => {
@@ -158,7 +161,7 @@ export function AgentWorkbench({
           agentId={agentId}
           snapshot={snapshot}
           assets={assets}
-          exposure={exposure}
+          activeThreats={activeThreats}
           onGoAssets={() => goAssets("MCP")}
           onGoThreat={() => {
             setThreatFindingId(undefined);
@@ -202,7 +205,7 @@ function Overview({
   agentId,
   snapshot,
   assets,
-  exposure,
+  activeThreats,
   onGoAssets,
   onGoThreat,
   onGoVuln,
@@ -214,7 +217,7 @@ function Overview({
   agentId: string;
   snapshot: ScanSnapshot;
   assets: Asset[];
-  exposure: ExposureFinding[];
+  activeThreats: number;
   onGoAssets: () => void;
   onGoThreat: () => void;
   onGoVuln: () => void;
@@ -237,6 +240,7 @@ function Overview({
   const knowledge = assets.filter((a) => a.type === "knowledge").length;
 
   const vulnComponents = cveForAgent(snapshot, agentId).length;
+  const scannedDeps = assets.filter((a) => a.type === "dependency").length;
 
   const ports = agent.listen_ports?.length ? agent.listen_ports.join(", ") : "—";
   const latestVer = agent.latest_version || agent.version || "—";
@@ -244,6 +248,43 @@ function Overview({
     !agent.latest_version || agent.latest_version === agent.version;
   const score = agentSecurityScore(snapshot, agentId);
   const suggestions = agentOptimizationSuggestions(snapshot, agentId);
+
+  let expHigh = 0;
+  let expMed = 0;
+  let expLow = 0;
+  for (const f of exposureForAgent(snapshot, agentId)) {
+    if (isThreatIgnored(snapshot, f)) continue;
+    if (f.severity === "high") expHigh++;
+    else if (f.severity === "medium") expMed++;
+    else if (f.severity === "low") expLow++;
+  }
+
+  const cveFindings = cveForAgent(snapshot, agentId);
+  let cveHigh = 0;
+  let cveMed = 0;
+  for (const c of cveFindings) {
+    if (c.severity === "high") cveHigh++;
+    else if (c.severity === "medium") cveMed++;
+  }
+
+  const exposureStats = [
+    { value: expHigh, label: "高危", color: "var(--high)" },
+    { value: expMed, label: "中危", color: "var(--med)" },
+    { value: expLow, label: "低危", color: "var(--low)" },
+  ];
+
+  const assetStats = [
+    { value: mcp, label: "MCP", color: "var(--purple-2)" },
+    { value: skills, label: "Skills", color: "var(--purple-2)" },
+    { value: knowledge, label: "知识库", color: "var(--purple-2)" },
+  ];
+
+  const cveStats = [
+    { value: scannedDeps, label: "已扫描", subLabel: "组件", color: "var(--purple-2)" },
+    { value: cveHigh, label: "高危", subLabel: "CVE", color: "var(--high)" },
+    { value: cveMed, label: "中危", color: "var(--med)" },
+    { value: vulnComponents, label: "受影响", subLabel: "组件", color: "var(--text-1)" },
+  ];
 
   return (
     <div className="overview-wrap">
@@ -266,50 +307,39 @@ function Overview({
         </div>
       </div>
 
-      <div className="overview-row-score">
-        <SecurityScoreCard score={score} onViewDetail={onGoThreat} />
-        <div className="card overview-risk-line-card">
-          <div style={{ fontWeight: 700, marginBottom: 12 }}>安全摘要</div>
-          <div className="overview-risk-line">
-            <button type="button" className="overview-risk-chip" onClick={onGoThreat}>
-              <span className="overview-risk-chip-label">威胁</span>
-              <span className="overview-risk-chip-value">{exposure.length}</span>
-              <span className="overview-risk-chip-go">查看 →</span>
-            </button>
-            <button type="button" className="overview-risk-chip" onClick={onGoVuln}>
-              <span className="overview-risk-chip-label">漏洞</span>
-              <span className="overview-risk-chip-value">{vulnComponents}</span>
-              <span className="overview-risk-chip-go">查看 →</span>
-            </button>
+      <div className="results-exposure-row agent-overview-hero">
+        <OverviewScoreCard score={score} onViewDetail={onGoThreat} />
+        <OverviewThreatCard
+          stats={exposureStats}
+          total={activeThreats}
+          onClick={onGoThreat}
+        />
+        <div className="card results-insight-card agent-overview-radar">
+          <div className="results-insight-head">权限分布</div>
+          <div className="results-radar-wrap">
+            <Radar axes={radarAxes} size={200} />
           </div>
         </div>
       </div>
 
-      <div className="overview-row-mid">
-        <div className="card overview-radar-card">
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>权限分布</div>
-          <div className="overview-radar-body">
-            <Radar axes={radarAxes} size={292} />
-          </div>
-        </div>
-        <div className="card overview-asset-card">
-          <div style={{ fontWeight: 700 }}>资产统计</div>
-          <div className="overview-asset-stats">
-            <div className="row" style={{ gap: 12, alignItems: "stretch", width: "100%" }}>
-              <StatBox icon={<IconCube size={20} />} label="MCP" value={mcp} />
-              <StatBox icon={<IconBolt size={20} />} label="Skills" value={skills} />
-              <StatBox icon={<IconBook size={20} />} label="知识库" value={knowledge} />
-            </div>
-          </div>
-          <div className="overview-asset-foot">
-            <button type="button" className="btn btn-ghost overview-goto-assets" onClick={onGoAssets}>
-              进入资产管理 →
-            </button>
-          </div>
-        </div>
+      <div className="results-summary-bottom agent-overview-mid">
+        <OverviewSummaryCard
+          icon={<IconLayers size={20} />}
+          title="Agent 资产"
+          stats={assetStats}
+          onClick={onGoAssets}
+        />
+        <OverviewSummaryCard
+          cve
+          icon={<IconCube size={20} />}
+          title="组件漏洞"
+          stats={cveStats}
+          note={vulnComponents === 0 ? "暂无已知 CVE" : undefined}
+          onClick={onGoVuln}
+        />
       </div>
 
-      <div className="overview-row-bottom">
+      <div className="results-insights agent-overview-bottom">
         <RuntimePanel agentId={agentId} />
         <OptimizationPanel
           items={suggestions}
@@ -321,7 +351,14 @@ function Overview({
   );
 }
 
-function SecurityScoreCard({
+interface OverviewStatItem {
+  value: number;
+  label: string;
+  subLabel?: string;
+  color: string;
+}
+
+function OverviewScoreCard({
   score,
   onViewDetail,
 }: {
@@ -332,50 +369,151 @@ function SecurityScoreCard({
     score >= 80 ? "安全" : score >= 60 ? "良好" : score >= 40 ? "注意" : "风险";
   const labelColor =
     score >= 80 ? "var(--safe)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
-  const ringColor = score >= 80 ? "var(--purple-2)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
+  const ringColor =
+    score >= 80 ? "var(--purple-2)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
   const pct = score / 100;
-  const r = 54;
+  const r = 46;
   const c = 2 * Math.PI * r;
   const desc =
     score >= 80
-      ? "未发现高风险行为，请继续保持良好使用习惯。"
+      ? "未发现高风险行为，请继续保持。"
       : score >= 60
-        ? "存在少量中低风险项，建议查看威胁管理详情。"
+        ? "存在少量中低风险项，建议查看威胁管理。"
         : "发现需关注的风险项，请尽快处理。";
 
   return (
-    <div className="card security-score-card">
-      <div style={{ fontWeight: 700, marginBottom: 14 }}>整体安全评分</div>
-      <div className="security-score-body">
-        <div className="security-score-gauge">
-          <svg viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
+    <div className="card security-score-card results-score-card">
+      <div className="results-score-title">整体安全评分</div>
+      <div className="security-score-body results-score-body">
+        <div className="security-score-gauge results-score-gauge">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
             <circle
-              cx="60"
-              cy="60"
+              cx="50"
+              cy="50"
               r={r}
               fill="none"
               stroke={ringColor}
-              strokeWidth="10"
+              strokeWidth="7"
               strokeLinecap="round"
               strokeDasharray={`${c * pct} ${c}`}
             />
           </svg>
           <div className="security-score-value">
-            <div className="security-score-num">{score}</div>
-            <div className="security-score-denom">/ 100</div>
+            <div className="results-score-num">{score}</div>
+            <div className="results-score-denom">/ 100</div>
           </div>
         </div>
-        <div className="security-score-info">
-          <div className="security-score-label" style={{ color: labelColor }}>
+        <div className="security-score-info results-score-info">
+          <div className="security-score-label results-score-status" style={{ color: labelColor }}>
             <IconShield size={16} />
             {label}
           </div>
-          <div className="security-score-desc">{desc}</div>
-          <button type="button" className="btn btn-primary security-score-detail-btn" onClick={onViewDetail}>
-            查看详情
+          <div className="security-score-desc results-score-desc">{desc}</div>
+          <button type="button" className="btn btn-primary btn-sm security-score-detail-btn" onClick={onViewDetail}>
+            查看威胁
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function OverviewThreatCard({
+  stats,
+  total,
+  onClick,
+}: {
+  stats: OverviewStatItem[];
+  total: number;
+  onClick: () => void;
+}) {
+  const tones: Record<string, "high" | "med" | "low"> = {
+    高危: "high",
+    中危: "med",
+    低危: "low",
+  };
+
+  return (
+    <div className="card exposure-summary-card" onClick={onClick}>
+      <div className="exposure-summary-top">
+        <div className="exposure-summary-title">
+          <span className="exposure-summary-icon">
+            <IconShield size={18} />
+          </span>
+          威胁管理
+        </div>
+        <span className="exposure-summary-meta">共 {total} 项待处理</span>
+      </div>
+      <div className="exposure-summary-body">
+        <div className="exposure-summary-stats">
+          {stats.map((s) => {
+            const tone = tones[s.label] || "low";
+            return (
+              <div key={s.label} className={`exposure-stat-card exposure-stat-${tone}`}>
+                <span className="exposure-stat-shield" style={{ color: s.color }}>
+                  <IconShieldBadge size={26} symbol={tone === "low" ? "info" : "alert"} />
+                </span>
+                <div className="exposure-stat-body">
+                  <div className="exposure-stat-label">{s.label}</div>
+                  <div className="exposure-stat-value" style={{ color: s.color }}>
+                    {s.value}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="exposure-summary-foot">
+        查看详情
+        <IconChevron size={13} />
+      </div>
+    </div>
+  );
+}
+
+function OverviewSummaryCard({
+  icon,
+  title,
+  stats,
+  note,
+  cve,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  stats: OverviewStatItem[];
+  note?: string;
+  cve?: boolean;
+  onClick: () => void;
+}) {
+  const mod = cve ? " summary-card-cve" : "";
+  return (
+    <div className={`card summary-card${mod}`} onClick={onClick}>
+      <div className="summary-card-head">
+        <span className="ic">{icon}</span>
+        {title}
+      </div>
+      <div className="summary-card-body">
+        <div className="summary-stats">
+          {stats.map((s) => (
+            <div key={s.label} className="summary-stat">
+              <div className="summary-stat-value" style={{ color: s.color }}>
+                {s.value}
+              </div>
+              <div className="summary-stat-label">
+                {s.label}
+                {s.subLabel && <span className="summary-stat-sublabel">{s.subLabel}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+        {note && <div className="summary-card-note">{note}</div>}
+      </div>
+      <div className="summary-card-foot">
+        查看详情
+        <IconChevron size={13} />
       </div>
     </div>
   );
@@ -391,26 +529,31 @@ function OptimizationPanel({
   onSelectFinding: (findingId: string) => void;
 }) {
   return (
-    <div className="card" style={{ padding: "16px 18px" }}>
-      <div style={{ fontWeight: 700, marginBottom: 12 }}>优化建议</div>
+    <div className="card results-insight-card results-pending-section">
+      <div className="results-insight-head row" style={{ gap: 8 }}>
+        <IconBolt size={16} style={{ color: "var(--purple-2)" }} />
+        优化建议
+      </div>
       {items.length === 0 ? (
         <div className="muted" style={{ fontSize: 13, padding: "24px 0", textAlign: "center" }}>
           暂无优化建议，当前状态良好
         </div>
       ) : (
-        <div className="opt-suggest-list">
+        <div className="pending-list">
           {items.map((item) => (
             <div
               key={item.id}
-              className="opt-suggest-row"
+              className="pending-item"
               onClick={() => {
                 if (item.findingId) onSelectFinding(item.findingId);
                 else onGoThreat();
               }}
             >
               <SeverityPill sev={item.severity} label={SEV_LABEL[item.severity]} />
-              <span className="opt-suggest-title">{item.title}</span>
-              <span className="opt-suggest-link">查看</span>
+              <div className="pending-text">
+                <div className="title">{item.title}</div>
+              </div>
+              <IconChevron size={14} className="dim" />
             </div>
           ))}
         </div>
@@ -502,9 +645,9 @@ function RuntimePanel({ agentId }: { agentId: string }) {
   const r = runtime;
 
   return (
-    <div className="card runtime-panel">
-      <div className="row runtime-panel-head">
-        <div style={{ fontWeight: 700 }}>资源占用</div>
+    <div className="card results-insight-card runtime-panel">
+      <div className="results-insight-head row runtime-panel-head">
+        <span>资源占用</span>
         <span className="spacer" />
         <button
           type="button"
@@ -573,15 +716,22 @@ function RuntimeMetric({
         </span>
         <span style={{ fontSize: 13, fontWeight: 600 }}>{value}</span>
       </div>
-      <div className="runtime-bar-track">
-        <div
-          className="runtime-bar-fill"
-          style={{ width: `${barPct}%`, background: color }}
-        />
+      <div className="runtime-metric-body">
+        <div className="runtime-bar-track">
+          <div
+            className="runtime-bar-fill"
+            style={{ width: `${barPct}%`, background: color }}
+          />
+        </div>
+        {history.length > 1 ? (
+          <div className="runtime-sparkline-wrap" title="最近多次刷新的占用趋势">
+            <span className="runtime-sparkline-label">近期波动</span>
+            <Sparkline data={history} color={color} max={max} />
+          </div>
+        ) : (
+          <div className="runtime-sparkline-empty">刷新后显示趋势</div>
+        )}
       </div>
-      {history.length > 0 && (
-        <Sparkline data={history} color={color} max={max} />
-      )}
     </div>
   );
 }
@@ -595,37 +745,36 @@ function Sparkline({
   color: string;
   max: number;
 }) {
-  const w = 120;
-  const h = 28;
+  const w = 160;
+  const h = 36;
+  const pad = 2;
+  const min = Math.min(...data);
+  const peak = Math.max(...data);
+  const span = Math.max(peak - min, max * 0.08, 1);
   const pts = data.map((v, i) => {
-    const x = (i / Math.max(data.length - 1, 1)) * w;
-    const y = h - (Math.min(v, max) / max) * h;
+    const x = pad + (i / Math.max(data.length - 1, 1)) * (w - pad * 2);
+    const norm = (Math.min(v, max) - min) / span;
+    const y = h - pad - norm * (h - pad * 2);
     return `${x},${y}`;
   });
+  const area = `${pad},${h - pad} ${pts.join(" ")} ${w - pad},${h - pad}`;
+  const last = pts[pts.length - 1]?.split(",") ?? [];
   return (
-    <svg className="runtime-sparkline" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+    <svg className="runtime-sparkline" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden>
+      <rect x={0} y={0} width={w} height={h} rx={4} className="runtime-sparkline-bg" />
+      <polygon points={area} className="runtime-sparkline-area" style={{ fill: color }} />
       <polyline
         fill="none"
         stroke={color}
-        strokeWidth="1.5"
+        strokeWidth="2"
         strokeLinejoin="round"
+        strokeLinecap="round"
         points={pts.join(" ")}
       />
+      {last.length === 2 && (
+        <circle cx={last[0]} cy={last[1]} r="2.5" fill={color} stroke="rgba(255,255,255,0.35)" strokeWidth="0.75" />
+      )}
     </svg>
-  );
-}
-
-function StatBox({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
-  return (
-    <div className="stat-box">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <span style={{ color: "var(--purple-2)" }}>{icon}</span>
-        <span className="muted" style={{ fontSize: 12 }}>
-          {label}
-        </span>
-      </div>
-      <div style={{ fontSize: 26, fontWeight: 800, marginTop: 10 }}>{value}</div>
-    </div>
   );
 }
 
@@ -675,18 +824,16 @@ function AssetTab({
 }) {
   const { updateAsset, disableAsset, enableAsset, uninstallAsset, settings, snapshot } =
     useApp();
-  const [sel, setSel] = useState("");
+  const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
   const [depModal, setDepModal] = useState<Asset | null>(null);
   const [confirm, setConfirm] = useState<{ kind: string; id: string } | null>(null);
 
   useEffect(() => {
-    setSel("");
+    setDetailAsset(null);
     setDepModal(null);
   }, [typeLabel, assets.length]);
 
   const isDep = typeLabel === "依赖";
-  const current = !isDep && sel ? assets.find((a) => a.id === sel) : undefined;
-  const split = !!current;
 
   if (assets.length === 0) {
     return (
@@ -695,10 +842,6 @@ function AssetTab({
       </div>
     );
   }
-
-  const toggleSel = (id: string) => {
-    setSel((prev) => (prev === id ? "" : id));
-  };
 
   const openDepModal = (asset: Asset) => {
     setDepModal(asset);
@@ -716,7 +859,7 @@ function AssetTab({
   };
 
   return (
-    <div className={`asset-tab${split ? " asset-tab-split" : ""}`}>
+    <div className="asset-tab">
       <div className="card asset-tab-list">
         <table className="data-table">
           <thead>
@@ -724,7 +867,6 @@ function AssetTab({
               <th>名称</th>
               <th style={{ width: 110 }}>状态</th>
               <th style={{ width: 100 }}>版本</th>
-              {!isDep && <th style={{ width: 72 }}>配置</th>}
               {!isDep && <th style={{ width: 72 }}>更新</th>}
               {!isDep && <th style={{ width: 72 }}>禁用</th>}
               {!isDep && <th style={{ width: 72 }}>卸载</th>}
@@ -735,7 +877,7 @@ function AssetTab({
           <tbody>
             {assets.map((a) => {
               const st = statusInfo(a);
-              const active = isDep ? depModal?.id === a.id : sel === a.id;
+              const active = isDep ? depModal?.id === a.id : detailAsset?.id === a.id;
               const cveRow = snapshot
                 ? cveItemsForDep(snapshot, agentId, a.name, a.version).length
                 : 0;
@@ -743,7 +885,7 @@ function AssetTab({
                 <tr
                   key={a.id}
                   className={`asset-tab-row${active ? " active" : ""}`}
-                  onClick={() => (isDep ? openDepModal(a) : toggleSel(a.id))}
+                  onClick={() => (isDep ? openDepModal(a) : setDetailAsset(a))}
                 >
                   <td>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{a.name}</div>
@@ -758,13 +900,6 @@ function AssetTab({
                     </span>
                   </td>
                   <td className="muted mono">{a.version || "—"}</td>
-                  {!isDep && (
-                    <td onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="asset-config-btn" title="配置">
-                        <IconSettings size={16} />
-                      </button>
-                    </td>
-                  )}
                   {!isDep && (
                     <td onClick={(e) => e.stopPropagation()}>
                       {a.can_update ? (
@@ -845,9 +980,28 @@ function AssetTab({
         </table>
       </div>
 
-      {current && (
-        <div className="card asset-tab-detail">
-          <AssetDetailPanel asset={current} typeLabel={typeLabel} />
+      {detailAsset && (
+        <div className="modal-mask" onClick={() => setDetailAsset(null)}>
+          <div
+            className="modal modal-lg cve-detail-modal asset-detail-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <div className="row" style={{ gap: 10, minWidth: 0 }}>
+                <div className="modal-title" style={{ minWidth: 0 }}>
+                  {detailAsset.name}
+                  <span className="dim" style={{ fontSize: 13, fontWeight: 500, marginLeft: 8 }}>
+                    {detailAsset.version || "—"}
+                  </span>
+                </div>
+                <span className="tag">{typeLabel}</span>
+              </div>
+              <button type="button" className="modal-close" onClick={() => setDetailAsset(null)}>
+                ×
+              </button>
+            </div>
+            <AssetDetailPanel asset={detailAsset} typeLabel={typeLabel} />
+          </div>
         </div>
       )}
 
@@ -945,7 +1099,6 @@ function DepDetailModal({
   const cves = cveItemsForDep(snapshot, agentId, asset.name, asset.version);
   const advice = depUpgradeAdvice(snapshot, agentId, asset.name, asset.version);
   const selected = selCve ? cves.find((c) => c.cve_id === selCve) : undefined;
-  const split = !!selected;
 
   const toggleCve = (cveId: string) => {
     setSelCve((prev) => (prev === cveId ? null : cveId));
@@ -954,7 +1107,7 @@ function DepDetailModal({
   return (
     <div className="modal-mask" onClick={onClose}>
       <div
-        className={`modal cve-detail-modal dep-detail-modal${split ? " cve-detail-modal-split" : ""}`}
+        className="modal cve-detail-modal dep-detail-modal"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
@@ -997,7 +1150,7 @@ function DepDetailModal({
           <div className="dep-modal-empty">未发现已知 CVE 漏洞</div>
         ) : (
           <>
-            <div className={`cve-modal-body${split ? " is-split" : ""}`}>
+            <div className="cve-modal-body cve-modal-body-stack">
               <div className="cve-modal-list">
                 <div className="cve-modal-list-head">CVE 列表</div>
                 <div className="cve-modal-cve-rows">
@@ -1012,9 +1165,7 @@ function DepDetailModal({
                       </span>
                       <SeverityPill sev={v.severity} />
                       <span style={{ fontWeight: 700, fontSize: 13 }}>{v.cvss.toFixed(1)}</span>
-                      {!split && (
-                        <span className="muted cve-modal-cve-summary">{v.summary}</span>
-                      )}
+                      <span className="muted cve-modal-cve-summary">{v.summary}</span>
                       <IconChevron
                         size={14}
                         className="dim"
@@ -1028,8 +1179,8 @@ function DepDetailModal({
                 </div>
               </div>
 
-              {split && selected && (
-                <div className="cve-modal-detail">
+              {selected && (
+                <div className="cve-modal-detail cve-modal-detail-stack">
                   <div className="cve-modal-list-head">漏洞详情</div>
                   <div className="cve-modal-detail-body">
                     <div className="row" style={{ gap: 10, marginBottom: 12 }}>

@@ -20,6 +20,7 @@ from typing import Optional
 from .asset_manager import AssetManager, AssetOperationError
 from .discovery.registry import discover_agent
 from .orchestrator import ScanOrchestrator
+from .paths import safe_normalize_readable_path
 from .runtime import get_agent_runtime
 from .store import SnapshotStore, default_data_dir
 
@@ -101,6 +102,12 @@ class IPCServer:
                 self._reply(req_id, self._agent_refresh(params))
             elif method == "agent.runtime.get":
                 self._reply(req_id, self._agent_runtime_get(params))
+            elif method == "threat.ignore":
+                self._reply(req_id, self._threat_ignore(params))
+            elif method == "threat.unignore":
+                self._reply(req_id, self._threat_unignore(params))
+            elif method == "file.read":
+                self._reply(req_id, self._file_read(params))
             else:
                 self._error(req_id, "未知方法: " + str(method), code="unknown_method")
         except AssetOperationError as exc:
@@ -193,6 +200,46 @@ class IPCServer:
             listen_ports=agent_dict.get("listen_ports"),
         )
         return {"runtime": runtime}
+
+    def _threat_ignore(self, params: dict) -> dict:
+        key = params.get("findingKey") or params.get("finding_key")
+        if not key:
+            raise ValueError("缺少 findingKey")
+        snap = self.store.ignore_threat(key)
+        if snap is None:
+            raise ValueError("无可用快照")
+        return {"snapshot": snap}
+
+    def _threat_unignore(self, params: dict) -> dict:
+        key = params.get("findingKey") or params.get("finding_key")
+        if not key:
+            raise ValueError("缺少 findingKey")
+        snap = self.store.unignore_threat(key)
+        if snap is None:
+            raise ValueError("无可用快照")
+        return {"snapshot": snap}
+
+    def _file_read(self, params: dict) -> dict:
+        path = params.get("path")
+        if not path:
+            raise ValueError("缺少 path")
+        snap = self.store.load()
+        if not snap:
+            raise ValueError("无可用快照")
+        norm = safe_normalize_readable_path(str(path))
+        if not norm:
+            raise ValueError("无效路径")
+        if not self.store.is_readable_finding_path(snap, norm):
+            raise ValueError("无权读取该路径")
+        if not os.path.isfile(norm):
+            raise ValueError("文件不存在")
+        max_bytes = 256 * 1024
+        with open(norm, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read(max_bytes + 1)
+        truncated = len(content) > max_bytes
+        if truncated:
+            content = content[:max_bytes]
+        return {"path": norm, "content": content, "truncated": truncated}
 
     # ---- 主循环 ----
 

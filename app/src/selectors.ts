@@ -20,10 +20,61 @@ export function exposureFindingKey(f: ExposureFinding): string {
   return `${f.source}::${f.id}`;
 }
 
+/** 默认加白：~/.hermes/skills/red-teaming（red-teaming 样例技能） */
+const WHITELIST_PATH_SUFFIX = "/.hermes/skills/red-teaming";
+
+function threatLocationPath(loc: string): string {
+  const raw = loc.trim();
+  if (raw.startsWith("/") || raw.startsWith("~")) {
+    return raw.replace(/:\d+$/, "");
+  }
+  return raw.split(":")[0];
+}
+
+export { threatLocationPath };
+
+export function isWhitelistedThreatPath(path: string): boolean {
+  const norm = threatLocationPath(path).replace(/\\/g, "/");
+  return (
+    norm.endsWith(WHITELIST_PATH_SUFFIX) ||
+    norm.includes(`${WHITELIST_PATH_SUFFIX}/`)
+  );
+}
+
+export function isThreatPathWhitelisted(f: ExposureFinding): boolean {
+  const locs = f.locations?.length ? f.locations : f.location ? [f.location] : [];
+  if (!locs.length) return false;
+  return locs.every(isWhitelistedThreatPath);
+}
+
+export function isThreatManuallyIgnored(s: ScanSnapshot, f: ExposureFinding): boolean {
+  return (s.ignored_threat_keys ?? []).includes(exposureFindingKey(f));
+}
+
+export function isThreatIgnored(s: ScanSnapshot, f: ExposureFinding): boolean {
+  return isThreatPathWhitelisted(f) || isThreatManuallyIgnored(s, f);
+}
+
+export function effectiveThreatSeverity(s: ScanSnapshot, f: ExposureFinding): Severity {
+  return isThreatIgnored(s, f) ? "safe" : f.severity;
+}
+
+/** 未忽略的威胁数量（可选限定 Agent） */
+export function activeThreatCount(s: ScanSnapshot, agentId?: string): number {
+  const list = agentId ? exposureForAgent(s, agentId) : s.exposure_findings;
+  return list.filter((f) => !isThreatIgnored(s, f)).length;
+}
+
 export function exposureCounts(s: ScanSnapshot) {
-  const c = { high: 0, medium: 0, low: 0 };
+  const c = { high: 0, medium: 0, low: 0, ignored: 0 };
   for (const f of s.exposure_findings) {
-    if (f.severity in c) (c as any)[f.severity]++;
+    if (isThreatIgnored(s, f)) {
+      c.ignored++;
+      continue;
+    }
+    if (f.severity === "high") c.high++;
+    else if (f.severity === "medium") c.medium++;
+    else if (f.severity === "low") c.low++;
   }
   return c;
 }
@@ -184,6 +235,7 @@ export function topItems(s: ScanSnapshot, limit = 3): TopItem[] {
   const items: TopItem[] = [];
 
   for (const f of s.exposure_findings) {
+    if (isThreatIgnored(s, f)) continue;
     const baseline = f.source === "agent_config" || f.source === "openclaw_audit";
     items.push({
       key: "e-" + exposureFindingKey(f),
@@ -233,6 +285,7 @@ export function riskCategoryBreakdownForAgent(
 ): RiskCategoryRow[] {
   const map = new Map<string, { count: number; maxSeverity: Severity }>();
   for (const f of exposureForAgent(s, agentId)) {
+    if (isThreatIgnored(s, f)) continue;
     const cat = f.category || "其他";
     const prev = map.get(cat);
     if (!prev) {
@@ -249,15 +302,19 @@ export function riskCategoryBreakdownForAgent(
     .sort((a, b) => b.count - a.count || SEV_WEIGHT[b.maxSeverity] - SEV_WEIGHT[a.maxSeverity]);
 }
 
+/** 综合安全评分（0–100）：递减扣分，避免多命中时直接归零 */
+function computeSecurityScore(high: number, med: number, low: number, cveHigh: number): number {
+  const threatDeduction = Math.min(75, high * 4 + med * 2 + low * 1);
+  const cveDeduction = Math.min(25, cveHigh * 6);
+  return Math.max(15, Math.min(100, 100 - threatDeduction - cveDeduction));
+}
+
 /** 扫描结果页 · 综合安全评分（0–100，威胁 + 高危 CVE） */
 export function scanSecurityScore(s: ScanSnapshot): number {
   const exp = exposureCounts(s);
   const cve = cveCounts(s);
   const cveHigh = s.meta.cve_status === "ok" ? cve.high : 0;
-  return Math.max(
-    0,
-    Math.min(100, 100 - exp.high * 10 - exp.medium * 5 - exp.low * 2 - cveHigh * 8)
-  );
+  return computeSecurityScore(exp.high, exp.medium, exp.low, cveHigh);
 }
 
 /** Agent 工作台 · 整体安全评分（0–100） */
@@ -267,12 +324,13 @@ export function agentSecurityScore(s: ScanSnapshot, agentId: string): number {
   let med = 0;
   let low = 0;
   for (const f of exp) {
+    if (isThreatIgnored(s, f)) continue;
     if (f.severity === "high") high++;
     else if (f.severity === "medium") med++;
     else if (f.severity === "low") low++;
   }
   const cveHigh = cveForAgent(s, agentId).filter((c) => c.severity === "high").length;
-  return Math.max(0, Math.min(100, 100 - high * 10 - med * 5 - low * 2 - cveHigh * 8));
+  return computeSecurityScore(high, med, low, cveHigh);
 }
 
 export interface AgentOptimizationItem {
@@ -294,6 +352,7 @@ export function agentOptimizationSuggestions(
     .sort((a, b) => SEV_WEIGHT[b.severity] - SEV_WEIGHT[a.severity]);
 
   for (const f of exp) {
+    if (isThreatIgnored(s, f)) continue;
     items.push({
       id: exposureFindingKey(f),
       title: f.title,
@@ -343,7 +402,7 @@ const AGENT_RADAR_COLORS: Record<string, { color: string; fill: string }> = {
 };
 const FALLBACK_RADAR_COLORS = [
   { color: "#34d399", fill: "rgba(52,211,153,0.2)" },
-  { color: "#f59e0b", fill: "rgba(245,158,11,0.2)" },
+  { color: "#eab308", fill: "rgba(234,179,8,0.2)" },
   { color: "#f472b6", fill: "rgba(244,114,182,0.2)" },
 ];
 
@@ -357,6 +416,7 @@ export interface RiskCategoryRow {
 export function riskCategoryBreakdown(s: ScanSnapshot): RiskCategoryRow[] {
   const map = new Map<string, { count: number; maxSeverity: Severity }>();
   for (const f of s.exposure_findings) {
+    if (isThreatIgnored(s, f)) continue;
     const cat = f.category || "其他";
     const prev = map.get(cat);
     if (!prev) {
