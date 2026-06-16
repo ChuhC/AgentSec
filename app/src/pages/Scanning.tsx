@@ -70,10 +70,7 @@ export function Scanning() {
           padding: 32,
         }}
       >
-        <span className="tag" style={{ marginBottom: 14 }}>
-          Step 2
-        </span>
-        <div style={{ fontSize: 24, fontWeight: 800 }}>正在扫描资产</div>
+        <div style={{ fontSize: 24, fontWeight: 800 }}>正在扫描</div>
         <div style={{ margin: "18px 0 8px" }}>
           <Ring percent={percent} />
         </div>
@@ -87,7 +84,7 @@ export function Scanning() {
           <Dashes />
           <StageNode
             icon={<IconShield size={20} />}
-            title="漏洞检测"
+            title="威胁检测"
             state={stageState("vuln")}
           />
           <Dashes />

@@ -71,20 +71,15 @@ export function Sidebar() {
           <IconAssets className="icon" />
           <span>资产管理</span>
         </div>
+      </nav>
+
+      <div className="sidebar-foot">
         <div
           className={`nav-item ${isSettings ? "active" : ""}`}
           onClick={() => navigate({ name: "settings" })}
         >
           <IconSettings className="icon" />
           <span>设置</span>
-        </div>
-      </nav>
-
-      <div className="plan-badge">
-        <div className="dot" />
-        <div>
-          <b>专业版</b>
-          <div>有效期至 2025-12-31</div>
         </div>
       </div>
     </aside>

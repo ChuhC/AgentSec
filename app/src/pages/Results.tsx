@@ -1,6 +1,7 @@
 import React from "react";
 import { useApp } from "../store";
 import {
+  activeThreatCount,
   agentPermissionRadars,
   assetCounts,
   cveCounts,
@@ -30,6 +31,182 @@ interface StatItem {
   label: string;
   subLabel?: string;
   color: string;
+}
+
+interface ExposureStatItem extends StatItem {
+  tone: "high" | "med" | "low";
+}
+
+function ResultsScoreCard({
+  score,
+  onViewDetail,
+}: {
+  score: number;
+  onViewDetail: () => void;
+}) {
+  const label =
+    score >= 80 ? "安全" : score >= 60 ? "良好" : score >= 40 ? "注意" : "风险";
+  const labelColor =
+    score >= 80 ? "var(--safe)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
+  const ringColor =
+    score >= 80 ? "var(--purple-2)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
+  const pct = score / 100;
+  const r = 46;
+  const c = 2 * Math.PI * r;
+  const desc =
+    score >= 80
+      ? "未发现高风险行为，请继续保持。"
+      : score >= 60
+        ? "存在少量中低风险项，建议查看威胁管理。"
+        : "发现需关注的风险项，请尽快处理。";
+
+  return (
+    <div className="card security-score-card results-score-card">
+      <div className="results-score-title">综合安全评分</div>
+      <div className="security-score-body results-score-body">
+        <div className="security-score-gauge results-score-gauge">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
+            <circle
+              cx="50"
+              cy="50"
+              r={r}
+              fill="none"
+              stroke={ringColor}
+              strokeWidth="7"
+              strokeLinecap="round"
+              strokeDasharray={`${c * pct} ${c}`}
+            />
+          </svg>
+          <div className="security-score-value">
+            <div className="results-score-num">{score}</div>
+            <div className="results-score-denom">/ 100</div>
+          </div>
+        </div>
+        <div className="security-score-info results-score-info">
+          <div className="security-score-label results-score-status" style={{ color: labelColor }}>
+            <IconShield size={16} />
+            {label}
+          </div>
+          <div className="security-score-desc results-score-desc">{desc}</div>
+          <button type="button" className="btn btn-primary btn-sm security-score-detail-btn" onClick={onViewDetail}>
+            查看威胁
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThreatSummaryCard({
+  stats,
+  total,
+  onClick,
+}: {
+  stats: StatItem[];
+  total: number;
+  onClick: () => void;
+}) {
+  const tones: Record<string, "high" | "med" | "low"> = {
+    高危: "high",
+    中危: "med",
+    低危: "low",
+  };
+  const items: ExposureStatItem[] = stats.map((s) => ({
+    ...s,
+    tone: tones[s.label] || "low",
+  }));
+
+  return (
+    <div className="card exposure-summary-card" onClick={onClick}>
+      <div className="exposure-summary-top">
+        <div className="exposure-summary-title">
+          <span className="exposure-summary-icon">
+            <IconShield size={18} />
+          </span>
+          威胁管理
+        </div>
+        <span className="exposure-summary-meta">共 {total} 项检查结论</span>
+      </div>
+      <div className="exposure-summary-body">
+        <div className="exposure-summary-stats">
+          {items.map((s) => (
+            <div key={s.label} className={`exposure-stat-card exposure-stat-${s.tone}`}>
+              <span className="exposure-stat-shield" style={{ color: s.color }}>
+                <IconShieldBadge size={26} symbol={s.tone === "low" ? "info" : "alert"} />
+              </span>
+              <div className="exposure-stat-body">
+                <div className="exposure-stat-label">{s.label}</div>
+                <div className="exposure-stat-value" style={{ color: s.color }}>
+                  {s.value}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="exposure-summary-foot">
+        查看详情
+        <IconChevron size={13} />
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({
+  icon,
+  title,
+  stats,
+  note,
+  empty,
+  featured,
+  cve,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  stats?: StatItem[];
+  note?: string;
+  empty?: React.ReactNode;
+  featured?: boolean;
+  cve?: boolean;
+  onClick: () => void;
+}) {
+  const mod = featured ? " summary-card-featured" : cve ? " summary-card-cve" : "";
+  return (
+    <div className={`card summary-card${mod}`} onClick={onClick}>
+      <div className="summary-card-head">
+        <span className="ic">{icon}</span>
+        {title}
+      </div>
+      <div className="summary-card-body">
+        {stats ? (
+          <>
+            <div className="summary-stats">
+              {stats.map((s) => (
+                <div key={s.label} className="summary-stat">
+                  <div className="summary-stat-value" style={{ color: s.color }}>
+                    {s.value}
+                  </div>
+                  <div className="summary-stat-label">
+                    {s.label}
+                    {s.subLabel && <span className="summary-stat-sublabel">{s.subLabel}</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {note && <div className="summary-card-note">{note}</div>}
+          </>
+        ) : (
+          <div className="summary-card-empty">{empty}</div>
+        )}
+      </div>
+      <div className="summary-card-foot">
+        查看详情
+        <IconChevron size={13} />
+      </div>
+    </div>
+  );
 }
 
 export function Results() {
@@ -83,10 +260,12 @@ export function Results() {
     }
   };
 
+  const activeThreats = activeThreatCount(snapshot);
+
   const exposureStats: StatItem[] = [
     { value: exp.high, label: "高危", color: "var(--high)" },
     { value: exp.medium, label: "中危", color: "var(--med)" },
-    { value: exp.low, label: "低危", color: "#38bdf8" },
+    { value: exp.low, label: "低危", color: "var(--low)" },
   ];
 
   const cveStats: StatItem[] = [
@@ -105,8 +284,6 @@ export function Results() {
     <main className="main">
       <div className="card results-toolbar">
         <div className="results-toolbar-inner">
-          <ResultsScoreBadge score={score} />
-          <div className="results-toolbar-divider" aria-hidden />
           <div className="row results-toolbar-meta">
             <div className="row results-toolbar-title" style={{ gap: 10 }}>
               <IconCheck size={20} style={{ color: "var(--safe)" }} />
@@ -135,14 +312,20 @@ export function Results() {
       </div>
 
       <div className="results-exposure-row">
+        <ResultsScoreCard
+          score={score}
+          onViewDetail={() => navigate(threatListRoute(snapshot))}
+        />
         <ThreatSummaryCard
           stats={exposureStats}
-          total={snapshot.exposure_findings.length}
+          total={activeThreats}
           onClick={() => navigate(threatListRoute(snapshot))}
         />
-        <div className="card results-insight-card results-risk-card">
+        <div className="card results-insight-card results-risk-card results-risk-card-square">
           <div className="results-insight-head">威胁类别分布</div>
-          <RiskCategoryChart rows={riskCats} />
+          <div className="results-risk-chart-wrap">
+            <RiskCategoryChart rows={riskCats} />
+          </div>
         </div>
       </div>
 
@@ -234,163 +417,5 @@ export function Results() {
         </div>
       </div>
     </main>
-  );
-}
-
-interface ExposureStatItem extends StatItem {
-  tone: "high" | "med" | "low";
-}
-
-function ThreatSummaryCard({
-  stats,
-  total,
-  onClick,
-}: {
-  stats: StatItem[];
-  total: number;
-  onClick: () => void;
-}) {
-  const tones: Record<string, "high" | "med" | "low"> = {
-    高危: "high",
-    中危: "med",
-    低危: "low",
-  };
-  const items: ExposureStatItem[] = stats.map((s) => ({
-    ...s,
-    tone: tones[s.label] || "low",
-  }));
-
-  return (
-    <div className="card exposure-summary-card" onClick={onClick}>
-      <div className="exposure-summary-top">
-        <div className="exposure-summary-title">
-          <span className="exposure-summary-icon">
-            <IconShield size={20} />
-          </span>
-          威胁管理
-        </div>
-        <span className="exposure-summary-meta">共 {total} 项检查结论</span>
-      </div>
-      <div className="exposure-summary-stats">
-        {items.map((s) => (
-          <div key={s.label} className={`exposure-stat-card exposure-stat-${s.tone}`}>
-            <span className="exposure-stat-shield" style={{ color: s.color }}>
-              <IconShieldBadge size={28} symbol={s.tone === "low" ? "info" : "alert"} />
-            </span>
-            <div className="exposure-stat-body">
-              <div className="exposure-stat-label">{s.label}</div>
-              <div className="exposure-stat-value" style={{ color: s.color }}>
-                {s.value}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <span className="exposure-summary-go" aria-label="查看详情">
-        <IconChevron size={16} />
-      </span>
-    </div>
-  );
-}
-
-function ResultsScoreBadge({ score }: { score: number }) {
-  const label =
-    score >= 80 ? "安全" : score >= 60 ? "良好" : score >= 40 ? "注意" : "风险";
-  const labelColor =
-    score >= 80 ? "var(--safe)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
-  const ringColor =
-    score >= 80 ? "var(--purple-2)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
-  const pct = score / 100;
-  const r = 22;
-  const c = 2 * Math.PI * r;
-
-  return (
-    <div className="results-score-badge" aria-label={`综合安全评分 ${score} 分，${label}`}>
-      <div className="results-score-gauge">
-        <svg viewBox="0 0 56 56">
-          <circle cx="28" cy="28" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="5" />
-          <circle
-            cx="28"
-            cy="28"
-            r={r}
-            fill="none"
-            stroke={ringColor}
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeDasharray={`${c * pct} ${c}`}
-            transform="rotate(-90 28 28)"
-          />
-        </svg>
-        <div className="results-score-value">
-          <span className="results-score-num">{score}</span>
-        </div>
-      </div>
-      <div className="results-score-copy">
-        <div className="results-score-label">综合安全评分</div>
-        <div className="results-score-meta">
-          <span className="results-score-denom">{score} / 100</span>
-          <span className="results-score-status" style={{ color: labelColor }}>
-            <IconShield size={13} />
-            {label}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SummaryCard({
-  icon,
-  title,
-  stats,
-  note,
-  empty,
-  featured,
-  cve,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  stats?: StatItem[];
-  note?: string;
-  empty?: React.ReactNode;
-  featured?: boolean;
-  cve?: boolean;
-  onClick: () => void;
-}) {
-  const mod = featured ? " summary-card-featured" : cve ? " summary-card-cve" : "";
-  return (
-    <div className={`card summary-card${mod}`} onClick={onClick}>
-      <div className="summary-card-head">
-        <span className="ic">{icon}</span>
-        {title}
-      </div>
-      <div className="summary-card-body">
-        {stats ? (
-          <>
-            <div className="summary-stats">
-              {stats.map((s) => (
-                <div key={s.label} className="summary-stat">
-                  <div className="summary-stat-value" style={{ color: s.color }}>
-                    {s.value}
-                  </div>
-                  <div className="summary-stat-label">
-                    {s.label}
-                    {s.subLabel && <span className="summary-stat-sublabel">{s.subLabel}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {note && <div className="summary-card-note">{note}</div>}
-          </>
-        ) : (
-          <div className="summary-card-empty">{empty}</div>
-        )}
-      </div>
-      <div className="summary-card-foot">
-        查看详情
-        <IconChevron size={13} />
-      </div>
-    </div>
   );
 }

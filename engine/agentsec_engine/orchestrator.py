@@ -76,7 +76,7 @@ class ScanOrchestrator:
         progress("discovery", 35, "资产发现完成", counts)
 
         # 2. 暴露面检测（ATR + OpenClaw audit）
-        progress("exposure", 55, "正在进行漏洞检测…", counts)
+        progress("exposure", 55, "正在进行威胁检测…", counts)
         targets = [ScanTarget(p, src, aids) for (p, src, aids) in atr_targets]
         total = len(targets) or 1
 
@@ -85,7 +85,7 @@ class ScanOrchestrator:
                 return
             # 暴露面阶段占 55%–78%，按文件数平滑推进
             pct = 55 + int(23 * done / max(total_files, 1))
-            progress("exposure", pct, f"漏洞检测中 ({done}/{total_files})…", counts)
+            progress("exposure", pct, f"威胁检测中 ({done}/{total_files})…", counts)
 
         exposure_findings = self.exposure.scan(
             agents,

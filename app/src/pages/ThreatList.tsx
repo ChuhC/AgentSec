@@ -1,8 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useApp } from "../store";
-import { SeverityPill } from "../components/common";
-import { exposureFindingKey, exposureForAgent } from "../selectors";
-import type { ExposureFinding, Severity } from "../types";
+import { ConfirmModal, SeverityPill } from "../components/common";
+import {
+  activeThreatCount,
+  effectiveThreatSeverity,
+  exposureFindingKey,
+  exposureForAgent,
+  isThreatIgnored,
+  isThreatManuallyIgnored,
+  isThreatPathWhitelisted,
+  threatLocationPath,
+} from "../selectors";
+import type { ExposureFinding, ScanSnapshot, Severity } from "../types";
 import {
   IconAlert,
   IconExternal,
@@ -35,7 +45,7 @@ export function ThreatList({
   category,
   embedded,
 }: ThreatListProps) {
-  const { snapshot } = useApp();
+  const { snapshot, ignoreThreat, unignoreThreat, readFile, lastError, clearError } = useApp();
 
   const baseFindings = useMemo(() => {
     if (!snapshot) return [];
@@ -67,6 +77,10 @@ export function ThreatList({
   const [agentFilter, setAgentFilter] = useState(agentId ?? "all");
   const [query, setQuery] = useState("");
   const [modalFinding, setModalFinding] = useState<ExposureFinding | null>(null);
+  const [confirmIgnore, setConfirmIgnore] = useState<ExposureFinding | null>(null);
+  const [fileView, setFileView] = useState<{ path: string; content: string; truncated: boolean } | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   useEffect(() => {
     if (agentId) setAgentFilter(agentId);
@@ -88,10 +102,18 @@ export function ThreatList({
     if (hit) setModalFinding(hit);
   }, [findingId, baseFindings]);
 
+  useEffect(() => {
+    if (!modalFinding || !snapshot) return;
+    const key = exposureFindingKey(modalFinding);
+    const updated = baseFindings.find((f) => exposureFindingKey(f) === key);
+    if (updated) setModalFinding(updated);
+  }, [snapshot, baseFindings]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return baseFindings.filter((f) => {
-      if (sevFilter !== "all" && f.severity !== sevFilter) return false;
+      const sev = snapshot ? effectiveThreatSeverity(snapshot, f) : f.severity;
+      if (sevFilter !== "all" && sev !== sevFilter) return false;
       if (catFilter !== "all" && f.category !== catFilter) return false;
       if (!agentId && agentFilter !== "all" && !f.agent_ids.includes(agentFilter)) return false;
       if (q) {
@@ -100,7 +122,45 @@ export function ThreatList({
       }
       return true;
     });
-  }, [baseFindings, sevFilter, catFilter, agentFilter, agentId, query]);
+  }, [baseFindings, sevFilter, catFilter, agentFilter, agentId, query, snapshot]);
+
+  const ignoredCount = useMemo(
+    () => (snapshot ? baseFindings.filter((f) => isThreatIgnored(snapshot, f)).length : 0),
+    [baseFindings, snapshot]
+  );
+  const whitelistedCount = useMemo(
+    () => (snapshot ? baseFindings.filter((f) => isThreatPathWhitelisted(f)).length : 0),
+    [baseFindings, snapshot]
+  );
+
+  const activeCount = snapshot ? activeThreatCount(snapshot, agentId) : baseFindings.length;
+
+  const openFile = async (path: string) => {
+    const filePath = threatLocationPath(path);
+    setFileLoading(true);
+    setFileError(null);
+    setFileView(null);
+    try {
+      const res = await readFile(filePath);
+      setFileView(res);
+    } catch (e: any) {
+      setFileError(e?.message || "无法读取文件");
+    } finally {
+      setFileLoading(false);
+    }
+  };
+
+  const handleIgnore = async (f: ExposureFinding) => {
+    await ignoreThreat(exposureFindingKey(f));
+    setConfirmIgnore(null);
+    if (modalFinding && exposureFindingKey(modalFinding) === exposureFindingKey(f)) {
+      setModalFinding({ ...f });
+    }
+  };
+
+  const handleUnignore = async (f: ExposureFinding) => {
+    await unignoreThreat(exposureFindingKey(f));
+  };
 
   const agentName = (id: string) =>
     snapshot?.agents.find((a) => a.id === id)?.name || id;
@@ -134,7 +194,9 @@ export function ThreatList({
       )}
 
       <div className="dim" style={{ fontSize: 12.5, marginBottom: 14 }}>
-        共 {baseFindings.length} 项威胁事件
+        共 {activeCount} 项待处理威胁
+        {whitelistedCount > 0 && <> · {whitelistedCount} 项默认加白</>}
+        {ignoredCount > whitelistedCount && <> · {ignoredCount - whitelistedCount} 项已忽略</>}
         {filtered.length !== baseFindings.length && <> · 当前筛选 {filtered.length} 项</>}
       </div>
 
@@ -149,6 +211,7 @@ export function ThreatList({
             <option value="high">高危</option>
             <option value="medium">中危</option>
             <option value="low">低危</option>
+            <option value="safe">已忽略</option>
           </select>
           <select
             className="select-input cve-filter"
@@ -199,13 +262,19 @@ export function ThreatList({
                 <th style={{ width: 120 }}>类别</th>
                 <th style={{ width: 110 }}>来源</th>
                 {!agentId && <th style={{ width: 130 }}>所属 Agent</th>}
-                <th style={{ width: 72 }}>操作</th>
+                <th style={{ width: 120 }}>操作</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((f) => (
+              {filtered.map((f) => {
+                const key = exposureFindingKey(f);
+                const pathWhitelisted = isThreatPathWhitelisted(f);
+                const ignored = snapshot ? isThreatIgnored(snapshot, f) : false;
+                const manuallyIgnored = snapshot ? isThreatManuallyIgnored(snapshot, f) : false;
+                const sev = snapshot ? effectiveThreatSeverity(snapshot, f) : f.severity;
+                return (
                 <tr
-                  key={exposureFindingKey(f)}
+                  key={key}
                   className="cve-list-row"
                   onClick={() => openModal(f)}
                 >
@@ -213,31 +282,79 @@ export function ThreatList({
                     <span className="row" style={{ gap: 8 }}>
                       <IconShield size={16} style={{ color: "var(--purple-2)", flexShrink: 0 }} />
                       <span style={{ fontWeight: 600 }}>{f.title}</span>
+                      {pathWhitelisted && <span className="tag tag-muted">默认加白</span>}
+                      {!pathWhitelisted && ignored && <span className="tag tag-muted">已忽略</span>}
                     </span>
                   </td>
                   <td>
-                    <SeverityPill sev={f.severity} />
+                    <SeverityPill sev={sev} />
                   </td>
                   <td className="muted">{f.category}</td>
                   <td className="dim" style={{ fontSize: 12.5 }}>
                     {SOURCE_LABEL[f.source] || f.source}
                   </td>
                   {!agentId && <td className="muted">{agentsLabel(f)}</td>}
-                  <td>
-                    <span className="act-link">查看</span>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <span className="act-link" onClick={() => openModal(f)}>查看</span>
+                    {!ignored ? (
+                      <>
+                        <span className="dim" style={{ margin: "0 6px" }}>|</span>
+                        <span className="act-link dim" onClick={() => setConfirmIgnore(f)}>忽略</span>
+                      </>
+                    ) : manuallyIgnored ? (
+                      <>
+                        <span className="dim" style={{ margin: "0 6px" }}>|</span>
+                        <span className="act-link" onClick={() => handleUnignore(f)}>恢复</span>
+                      </>
+                    ) : null}
                   </td>
                 </tr>
-              ))}
+              );})}
             </tbody>
           </table>
         )}
       </div>
 
-      {modalFinding && (
+      {modalFinding && snapshot && (
         <ThreatDetailModal
           finding={modalFinding}
+          snapshot={snapshot}
           agentName={agentName}
           onClose={() => setModalFinding(null)}
+          onIgnore={() => {
+            setConfirmIgnore(modalFinding);
+            setModalFinding(null);
+          }}
+          onUnignore={() => handleUnignore(modalFinding)}
+          onOpenFile={openFile}
+        />
+      )}
+
+      {confirmIgnore &&
+        createPortal(
+          <ConfirmModal
+            title="忽略此威胁"
+            message={`将「${confirmIgnore.title}」加入忽略列表，风险等级将标记为安全，概览统计会同步更新。`}
+            confirmLabel="确认忽略"
+            danger
+            onConfirm={() => handleIgnore(confirmIgnore)}
+            onCancel={() => setConfirmIgnore(null)}
+          />,
+          document.body
+        )}
+
+      {(fileView || fileLoading || fileError) && (
+        <FileContentModal
+          path={fileView?.path}
+          content={fileView?.content}
+          truncated={fileView?.truncated}
+          loading={fileLoading}
+          error={fileError || lastError}
+          onClose={() => {
+            setFileView(null);
+            setFileError(null);
+            clearError();
+          }}
         />
       )}
     </>
@@ -254,15 +371,27 @@ export function ExposureDetail({ findingId }: { findingId?: string }) {
 
 function ThreatDetailModal({
   finding,
+  snapshot,
   agentName,
   onClose,
+  onIgnore,
+  onUnignore,
+  onOpenFile,
 }: {
   finding: ExposureFinding;
+  snapshot: ScanSnapshot;
   agentName: (id: string) => string;
   onClose: () => void;
+  onIgnore: () => void;
+  onUnignore: () => void;
+  onOpenFile: (path: string) => void;
 }) {
   const locations =
     finding.locations?.length ? finding.locations : finding.location ? [finding.location] : [];
+  const pathWhitelisted = isThreatPathWhitelisted(finding);
+  const ignored = isThreatIgnored(snapshot, finding);
+  const manuallyIgnored = isThreatManuallyIgnored(snapshot, finding);
+  const sev = effectiveThreatSeverity(snapshot, finding);
 
   return (
     <div className="modal-mask" onClick={onClose}>
@@ -273,7 +402,9 @@ function ThreatDetailModal({
             <div className="modal-title" style={{ minWidth: 0 }}>
               {finding.title}
             </div>
-            <SeverityPill sev={finding.severity} />
+            <SeverityPill sev={sev} />
+            {pathWhitelisted && <span className="tag tag-muted">默认加白</span>}
+            {!pathWhitelisted && ignored && <span className="tag tag-muted">已忽略</span>}
           </div>
           <button className="modal-close" type="button" onClick={onClose}>
             ×
@@ -303,15 +434,23 @@ function ThreatDetailModal({
             <div className="h">
               <IconFile className="ic" size={16} /> 证据
             </div>
-            {locations.length > 1 && (
+            {locations.length > 0 && (
               <div style={{ marginBottom: 10 }}>
                 <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
-                  命中位置（{locations.length}）
+                  命中位置{locations.length > 1 ? `（${locations.length}）` : ""}
                 </div>
-                <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+                <ul className="threat-location-list">
                   {locations.map((loc) => (
-                    <li key={loc} className="mono" style={{ fontSize: 12.5 }}>
-                      {loc}
+                    <li key={loc}>
+                      <button
+                        type="button"
+                        className="threat-location-link mono"
+                        onClick={() => onOpenFile(loc)}
+                        title="查看原文"
+                      >
+                        {loc}
+                        <IconExternal size={12} />
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -341,6 +480,81 @@ function ThreatDetailModal({
             <div className="h">通俗说明（给普通用户）</div>
             <div className="plain-text">{finding.plain_explanation}</div>
           </div>
+        </div>
+
+        <div className="modal-foot threat-modal-foot">
+          {!ignored ? (
+            <button type="button" className="btn btn-sm" onClick={onIgnore}>
+              忽略此威胁
+            </button>
+          ) : manuallyIgnored ? (
+            <button type="button" className="btn btn-sm" onClick={onUnignore}>
+              取消忽略
+            </button>
+          ) : (
+            <span className="dim" style={{ fontSize: 12.5 }}>
+              位于 red-teaming 目录，已默认加白
+            </span>
+          )}
+          <div className="spacer" />
+          <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FileContentModal({
+  path,
+  content,
+  truncated,
+  loading,
+  error,
+  onClose,
+}: {
+  path?: string;
+  content?: string;
+  truncated?: boolean;
+  loading: boolean;
+  error?: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div className="modal-mask" style={{ zIndex: 60 }} onClick={onClose}>
+      <div className="modal modal-lg file-content-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title" style={{ fontSize: 15 }}>
+            原文查看
+          </div>
+          <button className="modal-close" type="button" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        {path && (
+          <div className="dim mono file-content-path" style={{ fontSize: 12, marginBottom: 12 }}>
+            {path}
+          </div>
+        )}
+        {loading && <div className="muted" style={{ padding: "24px 0" }}>正在读取…</div>}
+        {error && !loading && (
+          <div className="muted" style={{ padding: "24px 0", color: "var(--high)" }}>{error}</div>
+        )}
+        {content != null && !loading && (
+          <>
+            {truncated && (
+              <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
+                文件较大，仅显示前 256KB
+              </div>
+            )}
+            <pre className="evidence mono file-content-body">{content}</pre>
+          </>
+        )}
+        <div className="modal-foot">
+          <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>
+            关闭
+          </button>
         </div>
       </div>
     </div>
