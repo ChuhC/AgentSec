@@ -11,8 +11,10 @@ import {
   scanSecurityScore,
 } from "../selectors";
 import { threatListRoute, vulnListRoute } from "../navigation";
+import { scopeFromSetting } from "../i18n";
 import { Radar } from "../components/Radar";
 import { RiskCategoryChart } from "../components/RiskCategoryChart";
+import type { Severity } from "../types";
 import {
   IconChevron,
   IconClock,
@@ -31,6 +33,7 @@ interface StatItem {
   label: string;
   subLabel?: string;
   color: string;
+  sev?: Severity;
 }
 
 interface ExposureStatItem extends StatItem {
@@ -44,8 +47,10 @@ function ResultsScoreCard({
   score: number;
   onViewDetail: () => void;
 }) {
-  const label =
-    score >= 80 ? "安全" : score >= 60 ? "良好" : score >= 40 ? "注意" : "风险";
+  const { t } = useApp();
+  const statusKey =
+    score >= 80 ? "safe" : score >= 60 ? "good" : score >= 40 ? "caution" : "risk";
+  const label = t(`results.scoreStatus.${statusKey}`);
   const labelColor =
     score >= 80 ? "var(--safe)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
   const ringColor =
@@ -55,18 +60,18 @@ function ResultsScoreCard({
   const c = 2 * Math.PI * r;
   const desc =
     score >= 80
-      ? "未发现高风险行为，请继续保持。"
+      ? t("results.scoreDesc.safe")
       : score >= 60
-        ? "存在少量中低风险项，建议查看威胁管理。"
-        : "发现需关注的风险项，请尽快处理。";
+        ? t("results.scoreDesc.good")
+        : t("results.scoreDesc.risk");
 
   return (
     <div className="card security-score-card results-score-card">
-      <div className="results-score-title">综合安全评分</div>
+      <div className="results-score-title">{t("results.scoreTitle")}</div>
       <div className="security-score-body results-score-body">
         <div className="security-score-gauge results-score-gauge">
           <svg viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
+            <circle cx="50" cy="50" r={r} fill="none" className="score-gauge-track" strokeWidth="7" />
             <circle
               cx="50"
               cy="50"
@@ -90,7 +95,7 @@ function ResultsScoreCard({
           </div>
           <div className="security-score-desc results-score-desc">{desc}</div>
           <button type="button" className="btn btn-primary btn-sm security-score-detail-btn" onClick={onViewDetail}>
-            查看威胁
+            {t("results.viewThreats")}
           </button>
         </div>
       </div>
@@ -107,14 +112,17 @@ function ThreatSummaryCard({
   total: number;
   onClick: () => void;
 }) {
-  const tones: Record<string, "high" | "med" | "low"> = {
-    高危: "high",
-    中危: "med",
-    低危: "low",
+  const { t } = useApp();
+  const tones: Record<Severity, "high" | "med" | "low"> = {
+    high: "high",
+    medium: "med",
+    low: "low",
+    safe: "low",
+    info: "low",
   };
   const items: ExposureStatItem[] = stats.map((s) => ({
     ...s,
-    tone: tones[s.label] || "low",
+    tone: s.sev ? tones[s.sev] : "low",
   }));
 
   return (
@@ -124,9 +132,9 @@ function ThreatSummaryCard({
           <span className="exposure-summary-icon">
             <IconShield size={18} />
           </span>
-          威胁管理
+          {t("results.threatTitle")}
         </div>
-        <span className="exposure-summary-meta">共 {total} 项检查结论</span>
+        <span className="exposure-summary-meta">{t("results.threatMeta", { total })}</span>
       </div>
       <div className="exposure-summary-body">
         <div className="exposure-summary-stats">
@@ -146,7 +154,7 @@ function ThreatSummaryCard({
         </div>
       </div>
       <div className="exposure-summary-foot">
-        查看详情
+        {t("common.viewDetail")}
         <IconChevron size={13} />
       </div>
     </div>
@@ -172,6 +180,7 @@ function SummaryCard({
   cve?: boolean;
   onClick: () => void;
 }) {
+  const { t } = useApp();
   const mod = featured ? " summary-card-featured" : cve ? " summary-card-cve" : "";
   return (
     <div className={`card summary-card${mod}`} onClick={onClick}>
@@ -202,7 +211,7 @@ function SummaryCard({
         )}
       </div>
       <div className="summary-card-foot">
-        查看详情
+        {t("common.viewDetail")}
         <IconChevron size={13} />
       </div>
     </div>
@@ -210,11 +219,11 @@ function SummaryCard({
 }
 
 export function Results() {
-  const { snapshot, navigate, startScan } = useApp();
+  const { snapshot, navigate, startScan, t, layer } = useApp();
   if (!snapshot) {
     return (
       <main className="main">
-        <div className="muted">暂无扫描结果，请先在「安全扫描」发起扫描。</div>
+        <div className="muted">{t("common.empty.noScanResult")}</div>
       </main>
     );
   }
@@ -225,7 +234,11 @@ export function Results() {
   const scannedDeps = snapshot.meta.cve_scanned_count ?? ac.dependencies;
   const riskCats = riskCategoryBreakdown(snapshot);
   const pending = pendingActions(snapshot);
-  const { axes: radarAxes, series: radarSeries } = agentPermissionRadars(snapshot);
+  const { axes: radarAxesRaw, series: radarSeries } = agentPermissionRadars(snapshot);
+  const radarAxes = radarAxesRaw.map((a) => ({
+    ...a,
+    label: layer.permissionCategory(a.label),
+  }));
   const score = scanSecurityScore(snapshot);
 
   const goPending = (id: string) => {
@@ -263,15 +276,15 @@ export function Results() {
   const activeThreats = activeThreatCount(snapshot);
 
   const exposureStats: StatItem[] = [
-    { value: exp.high, label: "高危", color: "var(--high)" },
-    { value: exp.medium, label: "中危", color: "var(--med)" },
-    { value: exp.low, label: "低危", color: "var(--low)" },
+    { value: exp.high, label: t("common.severity.high"), color: "var(--high)", sev: "high" },
+    { value: exp.medium, label: t("common.severity.medium"), color: "var(--med)", sev: "medium" },
+    { value: exp.low, label: t("common.severity.low"), color: "var(--low)", sev: "low" },
   ];
 
   const cveStats: StatItem[] = [
-    { value: cve.high, label: "高危", subLabel: "CVE", color: "var(--high)" },
-    { value: cve.medium, label: "中危", color: "var(--med)" },
-    { value: cve.affected, label: "受影响", subLabel: "组件", color: "var(--text-1)" },
+    { value: cve.high, label: t("common.severity.high"), subLabel: "CVE", color: "var(--high)" },
+    { value: cve.medium, label: t("common.severity.medium"), color: "var(--med)" },
+    { value: cve.affected, label: t("common.stat.affected"), subLabel: t("common.stat.component"), color: "var(--text-1)" },
   ];
 
   const assetStats: StatItem[] = [
@@ -287,24 +300,24 @@ export function Results() {
           <div className="row results-toolbar-meta">
             <div className="row results-toolbar-title" style={{ gap: 10 }}>
               <IconCheck size={20} style={{ color: "var(--safe)" }} />
-              扫描完成
+              {t("results.scanComplete")}
             </div>
             <span className="muted row" style={{ gap: 6 }}>
               <IconClock size={15} />
-              {snapshot.meta.duration_seconds} 秒
+              {snapshot.meta.duration_seconds} {t("results.durationUnit")}
             </span>
             <span className="muted row" style={{ gap: 6 }}>
               <IconMonitor size={15} />
-              {snapshot.meta.scope}
+              {layer.scopeLabel(snapshot.meta.scope)}
             </span>
             <div className="spacer" />
             <button
               className="btn btn-primary results-rescan-btn"
-              onClick={() => startScan(snapshot.meta.scope)}
+              onClick={() => startScan(scopeFromSetting(snapshot.meta.scope))}
             >
               <span className="row" style={{ gap: 7 }}>
                 <IconRefresh size={15} />
-                重新扫描
+                {t("results.rescan")}
               </span>
             </button>
           </div>
@@ -322,7 +335,7 @@ export function Results() {
           onClick={() => navigate(threatListRoute(snapshot))}
         />
         <div className="card results-insight-card results-risk-card results-risk-card-square">
-          <div className="results-insight-head">威胁类别分布</div>
+          <div className="results-insight-head">{t("results.threatCategory")}</div>
           <div className="results-risk-chart-wrap">
             <RiskCategoryChart rows={riskCats} />
           </div>
@@ -332,22 +345,22 @@ export function Results() {
       <div className="results-summary-bottom">
         <SummaryCard
           icon={<IconLayers size={20} />}
-          title="Agent 资产"
+          title={t("common.nav.assets")}
           stats={assetStats}
           onClick={() => navigate({ name: "agent-list" })}
         />
         <SummaryCard
           cve
           icon={<IconCube size={20} />}
-          title="组件漏洞"
+          title={t("results.componentVulns")}
           stats={
             cveUnavailable
               ? undefined
               : [
                   {
                     value: scannedDeps,
-                    label: "已扫描",
-                    subLabel: "组件",
+                    label: t("common.stat.scanned"),
+                    subLabel: t("common.stat.component"),
                     color: "var(--purple-2)",
                   },
                   ...cveStats,
@@ -357,15 +370,15 @@ export function Results() {
             cveUnavailable
               ? undefined
               : cve.affected === 0
-                ? "暂无已知 CVE"
+                ? t("results.noKnownCve")
                 : undefined
           }
           empty={
             cveUnavailable ? (
               <span>
-                CVE 检测不可用
+                {t("results.cveUnavailable")}
                 <br />
-                <span className="dim">联网失败，可稍后重试</span>
+                <span className="dim">{t("results.cveNetworkFailed")}</span>
               </span>
             ) : undefined
           }
@@ -375,7 +388,7 @@ export function Results() {
 
       <div className="results-insights">
         <div className="card results-insight-card radar-card">
-          <div className="results-insight-head">全机权限雷达</div>
+          <div className="results-insight-head">{t("results.radarTitle")}</div>
           <div className="results-radar-wrap">
             <Radar axes={radarAxes} series={radarSeries} size={218} />
             {radarSeries.length > 0 && (
@@ -394,11 +407,11 @@ export function Results() {
         <div className="card results-insight-card results-pending-section">
           <div className="results-insight-head row" style={{ gap: 8 }}>
             <IconBolt size={16} style={{ color: "var(--purple-2)" }} />
-            待处理动作
+            {t("results.pendingTitle")}
           </div>
           {pending.length === 0 ? (
             <div className="muted" style={{ fontSize: 13, padding: "24px 0", textAlign: "center" }}>
-              暂无待处理项，当前状态良好
+              {t("results.pendingEmpty")}
             </div>
           ) : (
             <div className="pending-list">
@@ -406,8 +419,8 @@ export function Results() {
                 <div key={p.id} className="pending-item" onClick={() => goPending(p.id)}>
                   <div className={`pending-count ${p.tone}`}>{p.count}</div>
                   <div className="pending-text">
-                    <div className="title">{p.label}</div>
-                    <div className="detail">{p.detail}</div>
+                    <div className="title">{layer.pendingActionLabel(p.id)}</div>
+                    <div className="detail">{layer.pendingActionDetail(p.id, p.count)}</div>
                   </div>
                   <IconChevron size={14} className="dim" />
                 </div>

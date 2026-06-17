@@ -11,20 +11,20 @@ import {
 } from "../components/Icons";
 
 export function AgentList() {
-  const { snapshot, navigate, startScan } = useApp();
+  const { snapshot, navigate, startScan, t, layer } = useApp();
 
   if (!snapshot) {
     return (
       <main className="main">
-        <div className="page-title">资产管理</div>
+        <div className="page-title">{t("agentList.title")}</div>
         <div className="card" style={{ padding: 40, marginTop: 20, textAlign: "center" }}>
-          <div className="muted">尚未扫描，暂无资产数据。</div>
+          <div className="muted">{t("agentList.empty")}</div>
           <button
             className="btn btn-primary"
             style={{ marginTop: 16 }}
-            onClick={() => startScan("本机全部")}
+            onClick={() => startScan("all")}
           >
-            立即扫描
+            {t("agentList.scanNow")}
           </button>
         </div>
       </main>
@@ -35,10 +35,9 @@ export function AgentList() {
 
   return (
     <main className="main">
-      <div className="page-title">资产管理</div>
-      <div className="page-sub">选择 Agent 查看组件与权限</div>
+      <div className="page-title">{t("agentList.title")}</div>
+      <div className="page-sub">{t("agentList.subtitle")}</div>
 
-      {/* 汇总条 */}
       <div className="card" style={{ padding: "18px 24px", margin: "18px 0 18px" }}>
         <div className="row" style={{ justifyContent: "space-around" }}>
           <SummaryStat icon={<IconLayers size={22} />} value={ac.agents} label="Agents" />
@@ -47,9 +46,8 @@ export function AgentList() {
         </div>
       </div>
 
-      {/* Agent 卡片 */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        {snapshot.agents.map((agent, i) => {
+        {snapshot.agents.map((agent) => {
           const assets = assetsByAgent(snapshot, agent.id);
           const mcp = assets.filter((a) => a.type === "mcp").length;
           const skills = assets.filter((a) => a.type === "skill").length;
@@ -65,7 +63,7 @@ export function AgentList() {
                     <span className="ver-badge">{agent.version}</span>
                   </div>
                   <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                    {agent.description}
+                    {layer.agentDescription(agent.description)}
                   </div>
                 </div>
               </div>
@@ -76,7 +74,7 @@ export function AgentList() {
                 <MiniStat
                   icon={<IconPlug size={18} />}
                   value={updatable}
-                  label="待更新"
+                  label={t("agentList.pendingUpdate")}
                   highlight={updatable > 0}
                 />
               </div>
@@ -87,7 +85,7 @@ export function AgentList() {
                 onClick={() => navigate({ name: "agent-workbench", agentId: agent.id })}
               >
                 <span className="row" style={{ gap: 8, justifyContent: "center" }}>
-                  进入 <IconChevron size={15} />
+                  {t("agentList.enter")} <IconChevron size={15} />
                 </span>
               </button>
             </div>

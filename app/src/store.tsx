@@ -8,6 +8,20 @@ import React, {
   useState,
 } from "react";
 import type { AgentRuntime, ProgressData, ScanSnapshot, Severity } from "./types";
+import {
+  buildLocaleLayer,
+  createT,
+  localeFromSetting,
+  themeFromSetting,
+  type Locale,
+  type LocaleDataLayer,
+} from "./i18n";
+import { applyTheme, type ThemeSetting } from "./theme";
+import { readScreenshotBootstrap } from "./screenshotBootstrap";
+
+const screenshotBoot = readScreenshotBootstrap();
+
+export type ScanScope = "all" | "custom";
 
 export type Route =
   | { name: "scan-home" }
@@ -35,9 +49,8 @@ export type Route =
 export type ScanState = "idle" | "scanning" | "cancelling" | "done" | "error";
 
 export interface Settings {
-  language: string;
-  theme: string;
-  defaultScope: string;
+  language: Locale;
+  theme: ThemeSetting;
   confirmUpdate: boolean;
   confirmUninstall: boolean;
   confirmDisable: boolean;
@@ -52,7 +65,10 @@ interface AppState {
   scanError: string | null;
   settings: Settings;
   setSettings: (s: Partial<Settings>) => void;
-  startScan: (scope: string, scopePath?: string) => Promise<void>;
+  locale: Locale;
+  t: ReturnType<typeof createT>;
+  layer: LocaleDataLayer;
+  startScan: (scope: ScanScope, scopePath?: string) => Promise<void>;
   cancelScan: () => Promise<void>;
   updateAsset: (id: string) => Promise<void>;
   disableAsset: (id: string) => Promise<void>;
@@ -69,32 +85,77 @@ interface AppState {
 
 const Ctx = createContext<AppState | null>(null);
 
+const SETTINGS_KEY = "agentsec.settings";
+
 const DEFAULT_SETTINGS: Settings = {
-  language: "简体中文",
-  theme: "暗紫毛玻璃",
-  defaultScope: "本机全部",
+  language: "zh",
+  theme: "glass",
   confirmUpdate: true,
   confirmUninstall: true,
   confirmDisable: true,
 };
 
+function loadSettings(): Settings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    const parsed = raw
+      ? (JSON.parse(raw) as Partial<Settings & { language: string; theme: string }>)
+      : {};
+    const merged = { ...DEFAULT_SETTINGS, ...parsed, ...screenshotBoot?.settings };
+    return {
+      ...merged,
+      language: localeFromSetting(String(merged.language ?? "zh")),
+      theme: themeFromSetting(String(merged.theme ?? "glass")),
+    };
+  } catch {
+    const merged = { ...DEFAULT_SETTINGS, ...(screenshotBoot?.settings ?? {}) };
+    return {
+      ...merged,
+      language: localeFromSetting(String(merged.language ?? "zh")),
+      theme: themeFromSetting(String(merged.theme ?? "glass")),
+    };
+  }
+}
+
+function persistSettings(settings: Settings) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [route, setRoute] = useState<Route>({ name: "scan-home" });
+  const [route, setRoute] = useState<Route>(screenshotBoot?.route ?? { name: "scan-home" });
   const [snapshot, setSnapshot] = useState<ScanSnapshot | null>(null);
-  const [scanState, setScanState] = useState<ScanState>("idle");
+  const [scanState, setScanState] = useState<ScanState>(
+    screenshotBoot?.preloadSnapshot ? "done" : "idle"
+  );
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
-  const [settings, setSettingsState] = useState<Settings>(DEFAULT_SETTINGS);
+  const [settings, setSettingsState] = useState<Settings>(loadSettings);
+  const locale = settings.language;
+  const t = useMemo(() => createT(locale), [locale]);
+  const layer = useMemo(() => buildLocaleLayer(locale, t), [locale, t]);
   const navAfterScan = useRef(false);
   const snapshotRef = useRef<ScanSnapshot | null>(null);
   snapshotRef.current = snapshot;
 
   const navigate = useCallback((r: Route) => setRoute(r), []);
-  const setSettings = useCallback(
-    (s: Partial<Settings>) => setSettingsState((prev) => ({ ...prev, ...s })),
-    []
-  );
+  const setSettings = useCallback((s: Partial<Settings>) => {
+    setSettingsState((prev) => {
+      const next = { ...prev, ...s };
+      persistSettings(next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => applyTheme(settings.theme), [settings.theme]);
+
+  useEffect(() => {
+    document.documentElement.lang = locale === "en" ? "en" : "zh-CN";
+  }, [locale]);
   const clearError = useCallback(() => setLastError(null), []);
 
   // 启动时读取上次快照（NF-D1：重启可查看）
@@ -157,7 +218,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const startScan = useCallback(async (scope: string, scopePath?: string) => {
+  const startScan = useCallback(async (scope: ScanScope, scopePath?: string) => {
     setScanError(null);
     setProgress(null);
     setScanState("scanning");
@@ -167,9 +228,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await window.agentsec.request("scan.start", { scope, scopePath });
     } catch (e: any) {
       setScanState("error");
-      setScanError(e?.message || "无法启动扫描");
+      setScanError(e?.message || t("errors.scanStartFailed"));
     }
-  }, []);
+  }, [t]);
 
   const cancelScan = useCallback(async () => {
     try {
@@ -177,9 +238,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await window.agentsec.request("scan.cancel");
     } catch (e: any) {
       setScanState("scanning");
-      setLastError(e?.message || "取消扫描失败");
+      setLastError(e?.message || t("errors.cancelFailed"));
     }
-  }, []);
+  }, [t]);
 
   const doAssetOp = useCallback(
     async (method: string, id: string) => {
@@ -187,10 +248,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const res = await window.agentsec.request(method, { assetId: id });
         if (res?.snapshot) setSnapshot(res.snapshot);
       } catch (e: any) {
-        setLastError(e?.message || "操作失败");
+        setLastError(e?.message || t("errors.opFailed"));
       }
     },
-    []
+    [t]
   );
 
   const refreshAgentAssets = useCallback(async (agentId: string) => {
@@ -198,26 +259,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await window.agentsec.request("agent.refresh", { agentId });
       if (res?.snapshot) setSnapshot(res.snapshot);
     } catch (e: any) {
-      setLastError(e?.message || "刷新资产失败");
+      setLastError(e?.message || t("errors.refreshAssetsFailed"));
     }
-  }, []);
+  }, [t]);
 
   const fetchAgentRuntime = useCallback(async (agentId: string) => {
     try {
       const res = await window.agentsec.request("agent.runtime.get", { agentId });
       return (res?.runtime as AgentRuntime) ?? null;
     } catch (e: any) {
-      setLastError(e?.message || "获取资源占用失败");
+      setLastError(e?.message || t("errors.runtimeFailed"));
       return null;
     }
-  }, []);
+  }, [t]);
 
   const ignoreThreat = useCallback(async (findingKey: string) => {
     try {
       const res = await window.agentsec.request("threat.ignore", { findingKey });
       if (res?.snapshot) setSnapshot(res.snapshot);
     } catch (e: any) {
-      setLastError(e?.message || "忽略威胁失败");
+      setLastError(e?.message || t("errors.ignoreFailed"));
     }
   }, []);
 
@@ -226,19 +287,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await window.agentsec.request("threat.unignore", { findingKey });
       if (res?.snapshot) setSnapshot(res.snapshot);
     } catch (e: any) {
-      setLastError(e?.message || "取消忽略失败");
+      setLastError(e?.message || t("errors.unignoreFailed"));
     }
-  }, []);
+  }, [t]);
 
   const readFile = useCallback(async (path: string) => {
     try {
       const res = await window.agentsec.request("file.read", { path });
       return res as { path: string; content: string; truncated: boolean };
     } catch (e: any) {
-      setLastError(e?.message || "读取文件失败");
+      setLastError(e?.message || t("errors.readFileFailed"));
       throw e;
     }
-  }, []);
+  }, [t]);
 
   const value: AppState = useMemo(
     () => ({
@@ -250,6 +311,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scanError,
       settings,
       setSettings,
+      locale,
+      t,
+      layer,
       startScan,
       cancelScan,
       updateAsset: (id) => doAssetOp("asset.update", id),
@@ -264,7 +328,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       lastError,
       clearError,
     }),
-    [route, snapshot, scanState, progress, scanError, settings, lastError, refreshAgentAssets, fetchAgentRuntime, ignoreThreat, unignoreThreat, readFile]
+    [route, snapshot, scanState, progress, scanError, settings, locale, t, layer, lastError, refreshAgentAssets, fetchAgentRuntime, ignoreThreat, unignoreThreat, readFile]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

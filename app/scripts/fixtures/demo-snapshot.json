@@ -1,0 +1,1109 @@
+{
+  "schema_version": 1,
+  "meta": {
+    "started_at": "",
+    "finished_at": "2026-06-17 11:25:44",
+    "duration_seconds": 12,
+    "scope": "all",
+    "cve_status": "ok",
+    "cve_scanned_count": 24
+  },
+  "agents": [
+    {
+      "id": "hermes",
+      "name": "Hermes Agent",
+      "kind": "hermes",
+      "version": "v1.2.0",
+      "enabled": true,
+      "description": "通用智能体，擅长任务规划与工具调用",
+      "latest_version": "v1.3.0",
+      "listen_ports": [
+        "8080"
+      ],
+      "permissions": [
+        {
+          "id": "a-h-file",
+          "name": "读取本地文件",
+          "category": "文件",
+          "source": "agent_config",
+          "source_label": "Agent 默认",
+          "severity": "high"
+        },
+        {
+          "id": "a-h-shell",
+          "name": "执行 Shell 命令",
+          "category": "Shell",
+          "source": "agent_config",
+          "source_label": "Agent 默认",
+          "severity": "high"
+        },
+        {
+          "id": "a-h-net",
+          "name": "访问外部网络",
+          "category": "网络",
+          "source": "agent_config",
+          "source_label": "Agent 默认",
+          "severity": "medium"
+        }
+      ]
+    },
+    {
+      "id": "openclaw",
+      "name": "OpenClaw",
+      "kind": "openclaw",
+      "version": "v0.9.1",
+      "enabled": true,
+      "description": "安全研究专用智能体，专注漏洞分析与利用",
+      "latest_version": "v0.9.1",
+      "listen_ports": [
+        "18789"
+      ],
+      "permissions": [
+        {
+          "id": "a-o-shell",
+          "name": "执行 Shell 命令",
+          "category": "Shell",
+          "source": "agent_config",
+          "source_label": "Agent 默认",
+          "severity": "high"
+        },
+        {
+          "id": "a-o-net",
+          "name": "访问外部网络",
+          "category": "网络",
+          "source": "agent_config",
+          "source_label": "Agent 默认",
+          "severity": "medium"
+        },
+        {
+          "id": "a-o-file",
+          "name": "读取本地文件",
+          "category": "文件",
+          "source": "agent_config",
+          "source_label": "Agent 默认",
+          "severity": "medium"
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "hermes-mcp-filesystem",
+      "agent_id": "hermes",
+      "type": "mcp",
+      "name": "filesystem",
+      "version": "1.2.3",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "本地文件读写访问",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-fs-file",
+          "name": "读写文件",
+          "category": "文件",
+          "source": "mcp",
+          "source_label": "filesystem MCP",
+          "severity": "medium"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-mcp-shell",
+      "agent_id": "hermes",
+      "type": "mcp",
+      "name": "shell",
+      "version": "1.1.0",
+      "latest_version": "1.2.0",
+      "status": "updatable",
+      "purpose": "远程命令执行，支持在目标主机上执行 shell 命令并返回结果。",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-sh-shell",
+          "name": "执行命令、管理进程",
+          "category": "Shell",
+          "source": "mcp",
+          "source_label": "shell MCP",
+          "severity": "high"
+        },
+        {
+          "id": "p-sh-net",
+          "name": "访问内网、外网",
+          "category": "网络",
+          "source": "mcp",
+          "source_label": "shell MCP",
+          "severity": "medium"
+        },
+        {
+          "id": "p-sh-file",
+          "name": "读取、写入、创建、删除",
+          "category": "文件",
+          "source": "mcp",
+          "source_label": "shell MCP",
+          "severity": "high"
+        }
+      ],
+      "can_update": true,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-mcp-browser",
+      "agent_id": "hermes",
+      "type": "mcp",
+      "name": "browser",
+      "version": "0.9.5",
+      "latest_version": null,
+      "status": "disabled",
+      "purpose": "无头浏览器自动化与网页抓取",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-br-net",
+          "name": "发起网络请求",
+          "category": "网络",
+          "source": "mcp",
+          "source_label": "browser MCP",
+          "severity": "low"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-skill-web-search",
+      "agent_id": "hermes",
+      "type": "skill",
+      "name": "Web Search Skill",
+      "version": "1.1.0",
+      "latest_version": "1.2.0",
+      "status": "updatable",
+      "purpose": "联网搜索并汇总结果",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-ws-net",
+          "name": "网络搜索",
+          "category": "网络",
+          "source": "skill",
+          "source_label": "Web Search Skill",
+          "severity": "low"
+        }
+      ],
+      "can_update": true,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-skill-python-runner",
+      "agent_id": "hermes",
+      "type": "skill",
+      "name": "Python Runner Skill",
+      "version": "2.0.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "执行 Python 代码片段",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-py-exec",
+          "name": "代码执行 (Python)",
+          "category": "工具",
+          "source": "skill",
+          "source_label": "Python Runner Skill",
+          "severity": "high"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-skill-summarizer",
+      "agent_id": "hermes",
+      "type": "skill",
+      "name": "File Summarizer Skill",
+      "version": "1.0.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "辅助技能",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-skill-code-review",
+      "agent_id": "hermes",
+      "type": "skill",
+      "name": "Code Review Skill",
+      "version": "1.3.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "辅助技能",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-skill-translator",
+      "agent_id": "hermes",
+      "type": "skill",
+      "name": "Translator Skill",
+      "version": "0.8.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "辅助技能",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-kb-github",
+      "agent_id": "hermes",
+      "type": "knowledge",
+      "name": "GitHub Knowledge",
+      "version": "1.0.3",
+      "latest_version": "1.1.0",
+      "status": "updatable",
+      "purpose": "GitHub 仓库知识库",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-kb-read",
+          "name": "读取知识库内容",
+          "category": "知识库",
+          "source": "knowledge",
+          "source_label": "GitHub Knowledge",
+          "severity": "low"
+        }
+      ],
+      "can_update": true,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "hermes-kb-docs",
+      "agent_id": "hermes",
+      "type": "knowledge",
+      "name": "Docs Knowledge",
+      "version": "1.0.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "远程文档知识库",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-kb-dl",
+          "name": "下载远程内容",
+          "category": "知识库",
+          "source": "knowledge",
+          "source_label": "Docs Knowledge",
+          "severity": "low"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "openclaw-mcp-http",
+      "agent_id": "openclaw",
+      "type": "mcp",
+      "name": "HTTP MCP",
+      "version": "1.0.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "发起 HTTP 网络请求",
+      "source": "OpenClaw",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-http-net",
+          "name": "发起网络请求",
+          "category": "网络",
+          "source": "mcp",
+          "source_label": "HTTP MCP",
+          "severity": "low"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "openclaw-mcp-postgres",
+      "agent_id": "openclaw",
+      "type": "mcp",
+      "name": "PostgreSQL MCP",
+      "version": "0.9.1",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "读取数据库",
+      "source": "OpenClaw",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [
+        {
+          "id": "p-pg-db",
+          "name": "读数据库",
+          "category": "工具",
+          "source": "mcp",
+          "source_label": "PostgreSQL MCP",
+          "severity": "medium"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "openclaw-skill-exploit",
+      "agent_id": "openclaw",
+      "type": "skill",
+      "name": "Exploit Analyzer Skill",
+      "version": "1.0.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "安全研究技能",
+      "source": "OpenClaw",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "openclaw-skill-vuln",
+      "agent_id": "openclaw",
+      "type": "skill",
+      "name": "Vuln Scanner Skill",
+      "version": "1.2.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "安全研究技能",
+      "source": "OpenClaw",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "openclaw-skill-report",
+      "agent_id": "openclaw",
+      "type": "skill",
+      "name": "Report Generator Skill",
+      "version": "0.5.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "安全研究技能",
+      "source": "OpenClaw",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": true
+    },
+    {
+      "id": "dep-lodash",
+      "agent_id": "hermes",
+      "type": "dependency",
+      "name": "lodash",
+      "version": "4.17.11",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "npm 依赖组件",
+      "source": "hermes",
+      "ecosystem": "npm",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    },
+    {
+      "id": "dep-axios",
+      "agent_id": "hermes",
+      "type": "dependency",
+      "name": "axios",
+      "version": "0.21.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "npm 依赖组件",
+      "source": "hermes",
+      "ecosystem": "npm",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    },
+    {
+      "id": "dep-minimist",
+      "agent_id": "hermes",
+      "type": "dependency",
+      "name": "minimist",
+      "version": "1.2.0",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "npm 依赖组件",
+      "source": "hermes",
+      "ecosystem": "npm",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    },
+    {
+      "id": "dep-fastify",
+      "agent_id": "hermes",
+      "type": "dependency",
+      "name": "fastify",
+      "version": "4.17.1",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "npm 依赖组件",
+      "source": "hermes",
+      "ecosystem": "npm",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    },
+    {
+      "id": "dep-pyyaml",
+      "agent_id": "openclaw",
+      "type": "dependency",
+      "name": "pyyaml",
+      "version": "5.3",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "PyPI 依赖组件",
+      "source": "openclaw",
+      "ecosystem": "PyPI",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    },
+    {
+      "id": "dep-requests",
+      "agent_id": "openclaw",
+      "type": "dependency",
+      "name": "requests",
+      "version": "2.19.1",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "PyPI 依赖组件",
+      "source": "openclaw",
+      "ecosystem": "PyPI",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    },
+    {
+      "id": "dep-jinja2",
+      "agent_id": "openclaw",
+      "type": "dependency",
+      "name": "jinja2",
+      "version": "2.10",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "PyPI 依赖组件",
+      "source": "openclaw",
+      "ecosystem": "PyPI",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    },
+    {
+      "id": "dep-django",
+      "agent_id": "openclaw",
+      "type": "dependency",
+      "name": "django",
+      "version": "2.2",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "PyPI 依赖组件",
+      "source": "openclaw",
+      "ecosystem": "PyPI",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    },
+    {
+      "id": "dep-org.apache.logging.log4j:log4j-core",
+      "agent_id": "openclaw",
+      "type": "dependency",
+      "name": "org.apache.logging.log4j:log4j-core",
+      "version": "2.14.1",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "Maven 依赖组件",
+      "source": "openclaw",
+      "ecosystem": "Maven",
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": null,
+      "config_key": null,
+      "permissions": [],
+      "can_update": false,
+      "can_disable": false,
+      "can_uninstall": false
+    }
+  ],
+  "exposure_findings": [
+    {
+      "id": "ATR-2025-00012",
+      "title": "未授权的外网访问",
+      "severity": "high",
+      "category": "网络暴露",
+      "source": "agent_config",
+      "agent_ids": [
+        "hermes",
+        "openclaw"
+      ],
+      "impact": "Agent 可在无认证情况下访问任意外部网络地址，可能被诱导发起 SSRF 或数据外传。",
+      "evidence": "network.allow_outbound: \"*\"\nauth: none  (agent-config.yaml:8)",
+      "recommendation": "限制可访问的外部域名白名单，并为外网访问开启认证。",
+      "plain_explanation": "这个 AI 助手当前可以随意联网，建议只允许它访问必要的网站，更安全。",
+      "location": "agent-config.yaml:8",
+      "locations": [
+        "agent-config.yaml:8"
+      ],
+      "tags": [
+        "OWASP-LLM01",
+        "网络"
+      ]
+    },
+    {
+      "id": "ATR-2025-00034",
+      "title": "MCP权限过宽",
+      "severity": "medium",
+      "category": "权限与访问控制",
+      "source": "mcp",
+      "agent_ids": [
+        "hermes"
+      ],
+      "impact": "攻击者或恶意指令 (Prompt) 可能利用过宽权限读取敏感数据、执行敏感操作或访问不必要的系统资源，造成数据泄露或环境被控制。",
+      "evidence": "{\n  \"mcp_server\": \"filesystem-server\",\n  \"granted_permissions\": [\"read\", \"write\", \"delete\", \"exec\"],\n  \"path\": \"/\",\n  \"configured_by\": \"agent-config.yaml:12\"\n}",
+      "recommendation": "遵循最小权限原则，收窄 MCP 服务器权限范围，仅授予必要的读写或执行权限，并限制访问路径。",
+      "plain_explanation": "这个问题的意思是：当前配置给了 AI 助手太多的「操作权限」，可能让它做了不该做的事情，比如删除文件、改系统设置等。建议只给它完成任务所需的权限，更安全。",
+      "location": "agent-config.yaml:12",
+      "locations": [
+        "agent-config.yaml:12"
+      ],
+      "tags": [
+        "OWASP-LLM06",
+        "权限"
+      ]
+    },
+    {
+      "id": "ATR-2025-00041",
+      "title": "缺少输入验证",
+      "severity": "medium",
+      "category": "输入校验",
+      "source": "mcp",
+      "agent_ids": [
+        "hermes"
+      ],
+      "impact": "工具入参未校验，可能被注入恶意参数。",
+      "evidence": "tool.parameters: 未声明 schema (mcp.json:23)",
+      "recommendation": "为工具参数声明 schema 并做白名单校验。",
+      "plain_explanation": "助手调用工具时没有检查输入内容，容易被钻空子，建议加上检查。",
+      "location": "mcp.json:23",
+      "locations": [
+        "mcp.json:23"
+      ],
+      "tags": []
+    },
+    {
+      "id": "ATR-2025-00052",
+      "title": "日志级别过高",
+      "severity": "low",
+      "category": "日志与审计",
+      "source": "agent_config",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "impact": "DEBUG 级日志可能写入敏感信息。",
+      "evidence": "log.level: \"debug\" (openclaw.json:5)",
+      "recommendation": "生产环境降低日志级别至 info 或以上。",
+      "plain_explanation": "日志记录得太详细，可能把敏感信息写进文件，建议调低。",
+      "location": "openclaw.json:5",
+      "locations": [
+        "openclaw.json:5"
+      ],
+      "tags": []
+    },
+    {
+      "id": "ATR-2025-00067",
+      "title": "敏感信息未加密",
+      "severity": "medium",
+      "category": "数据安全",
+      "source": "agent_config",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "impact": "检测到配置中以明文形式引用凭证。",
+      "evidence": "api_key: <检测到… sk-x…>  (openclaw.json:14)",
+      "recommendation": "将凭证迁移至系统钥匙串或环境变量，避免明文落盘。",
+      "plain_explanation": "密码或密钥是明文存的，建议改成加密保存。",
+      "location": "openclaw.json:14",
+      "locations": [
+        "openclaw.json:14"
+      ],
+      "tags": []
+    },
+    {
+      "id": "ATR-2025-00071",
+      "title": "容器以 root 用户运行",
+      "severity": "low",
+      "category": "容器安全",
+      "source": "agent_config",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "impact": "容器逃逸后可获得宿主 root 权限。",
+      "evidence": "user: root (Dockerfile:1)",
+      "recommendation": "使用非特权用户运行容器。",
+      "plain_explanation": "程序以最高权限运行，风险较大，建议降权。",
+      "location": "Dockerfile:1",
+      "locations": [
+        "Dockerfile:1"
+      ],
+      "tags": []
+    },
+    {
+      "id": "ATR-2025-00078",
+      "title": "未设置资源限制",
+      "severity": "low",
+      "category": "资源与配额",
+      "source": "agent_config",
+      "agent_ids": [
+        "hermes"
+      ],
+      "impact": "无 CPU/内存限制，可能被拖垮。",
+      "evidence": "resources.limits: 未声明",
+      "recommendation": "为运行环境设置资源上限。",
+      "plain_explanation": "没有限制助手能用多少资源，极端情况下可能拖慢电脑。",
+      "location": "agent-config.yaml:30",
+      "locations": [
+        "agent-config.yaml:30"
+      ],
+      "tags": []
+    },
+    {
+      "id": "ATR-2025-00085",
+      "title": "未启用审计日志",
+      "severity": "low",
+      "category": "审计与合规",
+      "source": "agent_config",
+      "agent_ids": [
+        "hermes",
+        "openclaw"
+      ],
+      "impact": "无操作审计，事后难以追溯。",
+      "evidence": "audit.enabled: false",
+      "recommendation": "开启关键操作审计日志。",
+      "plain_explanation": "没有记录助手都做了什么，出问题不好追查，建议打开记录。",
+      "location": "agent-config.yaml:40",
+      "locations": [
+        "agent-config.yaml:40"
+      ],
+      "tags": []
+    }
+  ],
+  "cve_findings": [
+    {
+      "id": "cve-openclaw-core",
+      "component": "openclaw-core",
+      "component_type": "Maven",
+      "current_version": "1.3.2",
+      "fixed_version": "1.3.8",
+      "severity": "high",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "first_seen": "2025-05-20",
+      "cves": [
+        {
+          "cve_id": "CVE-2024-31756",
+          "severity": "high",
+          "cvss": 9.8,
+          "summary": "反序列化漏洞，攻击者可通过构造恶意数据绕过安全限制，执行任意代码。"
+        },
+        {
+          "cve_id": "CVE-2024-31757",
+          "severity": "high",
+          "cvss": 8.6,
+          "summary": "权限绕过漏洞，攻击者可绕过认证访问受限资源。"
+        },
+        {
+          "cve_id": "CVE-2024-31758",
+          "severity": "medium",
+          "cvss": 6.5,
+          "summary": "信息泄露漏洞，攻击者可获取敏感信息。"
+        },
+        {
+          "cve_id": "CVE-2024-31759",
+          "severity": "medium",
+          "cvss": 5.3,
+          "summary": "目录遍历漏洞，攻击者可访问任意系统文件。"
+        },
+        {
+          "cve_id": "CVE-2024-31760",
+          "severity": "low",
+          "cvss": 3.7,
+          "summary": "拒绝服务漏洞，攻击者可通过特定请求导致服务异常。"
+        },
+        {
+          "cve_id": "CVE-2024-31761",
+          "severity": "medium",
+          "cvss": 6.1,
+          "summary": "跨站脚本漏洞。"
+        },
+        {
+          "cve_id": "CVE-2024-31762",
+          "severity": "low",
+          "cvss": 3.1,
+          "summary": "信息暴露。"
+        }
+      ],
+      "upgrade_advice": "建议升级到最新安全版本 1.3.8。该版本已修复上述所有已知漏洞，建议尽快升级以保障系统安全。"
+    },
+    {
+      "id": "cve-log4j-core",
+      "component": "log4j-core",
+      "component_type": "Maven",
+      "current_version": "2.14.1",
+      "fixed_version": "2.17.1",
+      "severity": "high",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "first_seen": "2025-05-18",
+      "cves": [
+        {
+          "cve_id": "CVE-2021-44228",
+          "severity": "high",
+          "cvss": 10.0,
+          "summary": "Log4Shell 远程代码执行。"
+        },
+        {
+          "cve_id": "CVE-2021-45046",
+          "severity": "high",
+          "cvss": 9.0,
+          "summary": "RCE / 拒绝服务。"
+        },
+        {
+          "cve_id": "CVE-2021-45105",
+          "severity": "medium",
+          "cvss": 5.9,
+          "summary": "拒绝服务。"
+        },
+        {
+          "cve_id": "CVE-2021-44832",
+          "severity": "medium",
+          "cvss": 6.6,
+          "summary": "JDBC Appender RCE。"
+        },
+        {
+          "cve_id": "CVE-2020-9488",
+          "severity": "low",
+          "cvss": 3.7,
+          "summary": "证书校验不当。"
+        }
+      ],
+      "upgrade_advice": "升级到 2.17.1 以修复 Log4Shell 系列漏洞。"
+    },
+    {
+      "id": "cve-fastjson",
+      "component": "fastjson",
+      "component_type": "Maven",
+      "current_version": "1.2.68",
+      "fixed_version": "1.2.83",
+      "severity": "medium",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "first_seen": "2025-05-19",
+      "cves": [
+        {
+          "cve_id": "CVE-2022-25845",
+          "severity": "medium",
+          "cvss": 6.5,
+          "summary": "autoType 绕过反序列化。"
+        },
+        {
+          "cve_id": "CVE-2020-15170",
+          "severity": "medium",
+          "cvss": 5.6,
+          "summary": "拒绝服务。"
+        },
+        {
+          "cve_id": "CVE-2019-12384",
+          "severity": "low",
+          "cvss": 3.5,
+          "summary": "信息泄露。"
+        }
+      ],
+      "upgrade_advice": "升级到 1.2.83 并开启 safeMode。"
+    },
+    {
+      "id": "cve-commons-fileupload",
+      "component": "commons-fileupload",
+      "component_type": "Maven",
+      "current_version": "1.3.3",
+      "fixed_version": "1.5",
+      "severity": "medium",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "first_seen": "2025-05-15",
+      "cves": [
+        {
+          "cve_id": "CVE-2023-24998",
+          "severity": "medium",
+          "cvss": 7.5,
+          "summary": "DoS：上传过多分片。"
+        },
+        {
+          "cve_id": "CVE-2016-1000031",
+          "severity": "medium",
+          "cvss": 6.8,
+          "summary": "反序列化 RCE。"
+        }
+      ],
+      "upgrade_advice": "升级到 1.5。"
+    },
+    {
+      "id": "cve-jackson-databind",
+      "component": "jackson-databind",
+      "component_type": "Maven",
+      "current_version": "2.9.10",
+      "fixed_version": "2.15.0",
+      "severity": "low",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "first_seen": "2025-05-12",
+      "cves": [
+        {
+          "cve_id": "CVE-2020-36518",
+          "severity": "low",
+          "cvss": 3.7,
+          "summary": "嵌套对象 DoS。"
+        }
+      ],
+      "upgrade_advice": "升级到 2.15.0。"
+    },
+    {
+      "id": "cve-netty-all",
+      "component": "netty-all",
+      "component_type": "Maven",
+      "current_version": "4.1.42",
+      "fixed_version": "4.1.86",
+      "severity": "low",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "first_seen": "2025-05-10",
+      "cves": [
+        {
+          "cve_id": "CVE-2021-21290",
+          "severity": "low",
+          "cvss": 2.5,
+          "summary": "本地临时文件信息泄露。"
+        }
+      ],
+      "upgrade_advice": "升级到 4.1.86。"
+    },
+    {
+      "id": "cve-guava",
+      "component": "guava",
+      "component_type": "Maven",
+      "current_version": "30.0",
+      "fixed_version": null,
+      "severity": "low",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "first_seen": "2025-05-08",
+      "cves": [],
+      "upgrade_advice": "暂无需升级。"
+    },
+    {
+      "id": "cve-h2",
+      "component": "h2",
+      "component_type": "Maven",
+      "current_version": "1.4.200",
+      "fixed_version": null,
+      "severity": "low",
+      "agent_ids": [
+        "openclaw"
+      ],
+      "first_seen": "2025-05-06",
+      "cves": [],
+      "upgrade_advice": "暂无需升级。"
+    },
+    {
+      "id": "cve-fastify",
+      "component": "fastify",
+      "component_type": "npm",
+      "current_version": "4.17.1",
+      "fixed_version": "4.18.0",
+      "severity": "high",
+      "agent_ids": [
+        "hermes"
+      ],
+      "first_seen": "2025-05-28",
+      "cves": [
+        {
+          "cve_id": "CVE-2024-31999",
+          "severity": "high",
+          "cvss": 7.5,
+          "summary": "路径遍历漏洞，攻击者可读取服务端任意文件。"
+        }
+      ],
+      "upgrade_advice": "升级到 4.18.0 修复路径遍历漏洞。"
+    }
+  ]
+}

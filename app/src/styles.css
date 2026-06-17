@@ -31,6 +31,327 @@
   --radius: 16px;
   --radius-sm: 10px;
   --border: 1px solid rgba(255, 255, 255, 0.06);
+
+  --gauge-track: rgba(255, 255, 255, 0.08);
+  --radar-grid-stroke: rgba(255, 255, 255, 0.1);
+  --radar-axis-stroke: rgba(255, 255, 255, 0.08);
+  --radar-label-fill: #a59fc0;
+}
+
+html[data-theme="glass"] {
+  color-scheme: dark;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-0: #0c0c0e;
+  --bg-1: #121216;
+  --bg-sidebar: rgba(16, 16, 20, 0.92);
+  --bg-card: rgba(255, 255, 255, 0.04);
+  --bg-card-hover: rgba(255, 255, 255, 0.06);
+  --bg-inset: rgba(0, 0, 0, 0.35);
+  --purple: #7c6df0;
+  --purple-2: #9488f5;
+  --purple-soft: rgba(124, 109, 240, 0.12);
+  --purple-border: rgba(124, 109, 240, 0.18);
+  --text-1: #ececf1;
+  --text-2: #a1a1aa;
+  --text-3: #71717a;
+  --border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme="dark"] .app {
+  background: linear-gradient(180deg, var(--bg-0), var(--bg-1));
+}
+
+html[data-theme="dark"] .nav-item.active {
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .cve-modal-detail {
+  background: var(--bg-inset);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg-0: #f6f4fb;
+  --bg-1: #ece8f4;
+  --bg-sidebar: rgba(255, 255, 255, 0.9);
+  --bg-card: rgba(255, 255, 255, 0.94);
+  --bg-card-hover: rgba(139, 92, 246, 0.08);
+  --bg-inset: rgba(0, 0, 0, 0.04);
+  --purple: #7c3aed;
+  --purple-2: #8b5cf6;
+  --purple-soft: rgba(139, 92, 246, 0.12);
+  --purple-border: rgba(139, 92, 246, 0.2);
+  --text-1: #1a1528;
+  --text-2: #3d3852;
+  --text-3: #5a5470;
+  --high: #e11d48;
+  --high-bg: rgba(225, 29, 72, 0.1);
+  --med: #ca8a04;
+  --med-bg: rgba(202, 138, 4, 0.12);
+  --low: #0284c7;
+  --low-bg: rgba(2, 132, 199, 0.1);
+  --safe: #059669;
+  --safe-bg: rgba(5, 150, 105, 0.1);
+  --border: 1px solid rgba(0, 0, 0, 0.08);
+  --gauge-track: rgba(0, 0, 0, 0.1);
+  --radar-grid-stroke: rgba(91, 33, 182, 0.22);
+  --radar-axis-stroke: rgba(0, 0, 0, 0.14);
+  --radar-label-fill: #3d3852;
+}
+
+html[data-theme="light"] .app {
+  background: linear-gradient(
+      900px 480px at 70% -5%,
+      rgba(139, 92, 246, 0.1),
+      transparent 55%
+    ),
+    linear-gradient(180deg, var(--bg-0), var(--bg-1));
+}
+
+html[data-theme="light"] .nav-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+html[data-theme="light"] .nav-item.active {
+  color: #5b21b6;
+  background: rgba(139, 92, 246, 0.14);
+  box-shadow: inset 2px 0 0 var(--purple-2);
+}
+
+html[data-theme="light"] .sidebar-foot {
+  border-top-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .glow-panel {
+  background: linear-gradient(
+      180deg,
+      rgba(139, 92, 246, 0.07),
+      rgba(255, 255, 255, 0.85)
+    );
+}
+
+html[data-theme="light"] .btn:not(.btn-primary):not(.btn-ghost) {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .btn:not(.btn-primary):not(.btn-ghost):hover {
+  background: rgba(0, 0, 0, 0.07);
+}
+
+html[data-theme="light"] .btn-primary {
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.28);
+}
+
+html[data-theme="light"] .btn-primary:hover {
+  background: linear-gradient(135deg, var(--purple), var(--purple-2));
+  color: #fff;
+  filter: brightness(1.06);
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.34);
+}
+
+html[data-theme="light"] .text-input,
+html[data-theme="light"] .select-input {
+  background: #fff;
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] .switch {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme="light"] .tab.active {
+  color: var(--purple-2);
+}
+
+html[data-theme="light"] .evidence {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .data-table th {
+  color: var(--text-2);
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .data-table td {
+  border-bottom-color: rgba(0, 0, 0, 0.04);
+}
+
+html[data-theme="light"] .data-table tbody tr:hover {
+  background: rgba(139, 92, 246, 0.05);
+}
+
+html[data-theme="light"] .toast {
+  background: rgba(225, 29, 72, 0.1);
+  color: #9f1239;
+  border-color: rgba(225, 29, 72, 0.35);
+}
+
+html[data-theme="light"] .cve-modal-cve-row:hover {
+  background: rgba(139, 92, 246, 0.08);
+}
+
+html[data-theme="light"] .cve-modal-cve-row.active {
+  background: rgba(139, 92, 246, 0.14);
+}
+
+html[data-theme="light"] .cve-modal-detail {
+  background: #fff;
+}
+
+html[data-theme="light"] .sub-tab-pill {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .summary-stat {
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .summary-stat-label {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .summary-stat-sublabel,
+html[data-theme="light"] .summary-card-note {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .summary-card-foot {
+  border-top-color: rgba(0, 0, 0, 0.06);
+  color: #6d28d9;
+}
+
+html[data-theme="light"] .exposure-summary-meta,
+html[data-theme="light"] .exposure-stat-label {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .exposure-stat-card {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .exposure-stat-high {
+  background: rgba(225, 29, 72, 0.08);
+  border-color: rgba(225, 29, 72, 0.2);
+}
+
+html[data-theme="light"] .exposure-stat-med {
+  background: rgba(202, 138, 4, 0.1);
+  border-color: rgba(202, 138, 4, 0.22);
+}
+
+html[data-theme="light"] .exposure-stat-low {
+  background: rgba(2, 132, 199, 0.08);
+  border-color: rgba(2, 132, 199, 0.2);
+}
+
+html[data-theme="light"] .exposure-summary-foot {
+  border-top-color: rgba(0, 0, 0, 0.06);
+  color: #6d28d9;
+}
+
+html[data-theme="light"] .security-score-desc,
+html[data-theme="light"] .results-score-desc {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .results-score-denom {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .risk-chart-bar-wrap {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .risk-chart-label {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .pending-text .detail {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .pending-item {
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .pending-item:hover {
+  background: rgba(139, 92, 246, 0.08);
+}
+
+html[data-theme="light"] .radar-legend-item {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .muted {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .dim {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .page-sub {
+  color: var(--text-2);
+}
+
+html[data-theme="light"] .score-gauge-track {
+  stroke: var(--gauge-track);
+}
+
+html[data-theme="light"] .sub-tab-pill.active {
+  background: rgba(139, 92, 246, 0.14);
+  color: #5b21b6;
+}
+
+.scan-ring-track {
+  stroke: rgba(255, 255, 255, 0.07);
+}
+html[data-theme="light"] .scan-ring-track {
+  stroke: rgba(0, 0, 0, 0.08);
+}
+.scan-ring-percent {
+  fill: #fff;
+}
+html[data-theme="light"] .scan-ring-percent {
+  fill: var(--text-1);
+}
+.scan-ring-label {
+  fill: #a59fc0;
+}
+html[data-theme="light"] .scan-ring-label {
+  fill: var(--text-2);
+}
+.scan-stage-wait {
+  background: rgba(255, 255, 255, 0.04);
+}
+html[data-theme="light"] .scan-stage-wait {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.radar-grid {
+  fill: none;
+  stroke: var(--radar-grid-stroke);
+  stroke-width: 1;
+}
+.radar-axis {
+  stroke: var(--radar-axis-stroke);
+  stroke-width: 1;
+}
+.radar-label {
+  font-size: 12px;
+  fill: var(--radar-label-fill);
+}
+.score-gauge-track {
+  stroke: var(--gauge-track);
 }
 
 * {
@@ -51,6 +372,10 @@ body {
   background: var(--bg-0);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+html:not([data-theme]) {
+  color-scheme: dark;
 }
 
 .app {
@@ -193,7 +518,7 @@ body {
   background: rgba(255, 255, 255, 0.06);
   transition: filter 0.15s, background 0.15s;
 }
-.btn:hover {
+.btn:not(.btn-primary):not(.btn-ghost):hover {
   background: rgba(255, 255, 255, 0.1);
 }
 .btn-primary {
@@ -203,7 +528,9 @@ body {
   box-shadow: 0 6px 24px rgba(139, 92, 246, 0.4);
 }
 .btn-primary:hover {
+  background: linear-gradient(135deg, var(--purple), var(--purple-2));
   filter: brightness(1.08);
+  color: #fff;
 }
 .btn-ghost {
   background: transparent;

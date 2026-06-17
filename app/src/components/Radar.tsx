@@ -50,27 +50,11 @@ export function Radar({
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
       {gridLevels.map((g) => (
-        <polygon
-          key={g}
-          points={polygon(R * g)}
-          fill="none"
-          stroke="rgba(255,255,255,0.07)"
-          strokeWidth="1"
-        />
+        <polygon key={g} points={polygon(R * g)} className="radar-grid" />
       ))}
       {axes.map((_, i) => {
         const [x, y] = pt(i, R);
-        return (
-          <line
-            key={i}
-            x1={cx}
-            y1={cy}
-            x2={x}
-            y2={y}
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth="1"
-          />
-        );
+        return <line key={i} x1={cx} y1={cy} x2={x} y2={y} className="radar-axis" />;
       })}
       {layers.map((layer) => {
         const dataPts = layer.scores.map((s, i) => pt(i, R * Math.max(0.08, s)));
@@ -98,8 +82,7 @@ export function Radar({
             y={y}
             textAnchor="middle"
             dominantBaseline="middle"
-            fontSize="12"
-            fill="#a59fc0"
+            className="radar-label"
           >
             {a.label}
           </text>

@@ -1,5 +1,7 @@
 import React from "react";
 import { useApp } from "../store";
+import type { Locale } from "../i18n";
+import type { ThemeSetting } from "../theme";
 import {
   IconSettings,
   IconScan,
@@ -8,59 +10,61 @@ import {
 } from "../components/Icons";
 
 export function Settings() {
-  const { settings, setSettings } = useApp();
+  const { settings, setSettings, t } = useApp();
 
   return (
     <main className="main">
-      <div className="page-title">设置</div>
+      <div className="page-title">{t("settings.title")}</div>
 
       <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 16 }}>
-        <Group icon={<IconSettings size={18} />} title="通用">
+        <Group icon={<IconSettings size={18} />} title={t("settings.general")}>
           <SelectRow
-            label="语言"
+            label={t("settings.language")}
             value={settings.language}
-            options={["简体中文", "English"]}
-            onChange={(v) => setSettings({ language: v })}
+            options={[
+              { value: "zh", label: t("settings.langZh") },
+              { value: "en", label: t("settings.langEn") },
+            ]}
+            onChange={(v) => setSettings({ language: v as Locale })}
           />
           <SelectRow
-            label="主题"
+            label={t("settings.theme")}
             value={settings.theme}
-            options={["暗紫毛玻璃", "深色", "跟随系统"]}
-            onChange={(v) => setSettings({ theme: v })}
+            options={[
+              { value: "glass", label: t("settings.themeGlass") },
+              { value: "light", label: t("settings.themeLight") },
+              { value: "dark", label: t("settings.themeDark") },
+              { value: "system", label: t("settings.themeSystem") },
+            ]}
+            onChange={(v) => setSettings({ theme: v as ThemeSetting })}
           />
         </Group>
 
-        <Group icon={<IconScan size={18} />} title="扫描">
-          <SelectRow
-            label="默认路径"
-            value={settings.defaultScope}
-            options={["本机全部", "自定义路径"]}
-            onChange={(v) => setSettings({ defaultScope: v })}
-          />
-          <InfoRow label="结果保留" value="仅保留最近一次扫描" />
+        <Group icon={<IconScan size={18} />} title={t("settings.scan")}>
+          <InfoRow label={t("settings.retention")} value={t("settings.retentionValue")} />
         </Group>
 
-        <Group icon={<IconCube size={18} />} title="资产管理">
+        <Group icon={<IconCube size={18} />} title={t("settings.assets")}>
           <SwitchRow
-            label="更新前确认"
+            label={t("settings.confirmUpdate")}
             value={settings.confirmUpdate}
             onChange={(v) => setSettings({ confirmUpdate: v })}
           />
           <SwitchRow
-            label="卸载前确认"
+            label={t("settings.confirmUninstall")}
             value={settings.confirmUninstall}
             onChange={(v) => setSettings({ confirmUninstall: v })}
           />
           <SwitchRow
-            label="禁用前确认"
+            label={t("settings.confirmDisable")}
             value={settings.confirmDisable}
             onChange={(v) => setSettings({ confirmDisable: v })}
           />
         </Group>
 
-        <Group icon={<IconAlert size={18} />} title="关于">
-          <InfoRow label="版本" value="0.1.0" />
-          <InfoRow label="许可证" value="Apache-2.0" />
+        <Group icon={<IconAlert size={18} />} title={t("settings.about")}>
+          <InfoRow label={t("settings.version")} value="0.1.0" />
+          <InfoRow label={t("settings.license")} value="Apache-2.0" />
         </Group>
       </div>
     </main>
@@ -111,7 +115,7 @@ function SelectRow({
 }: {
   label: string;
   value: string;
-  options: string[];
+  options: { value: string; label: string }[];
   onChange: (v: string) => void;
 }) {
   return (
@@ -125,8 +129,8 @@ function SelectRow({
         onChange={(e) => onChange(e.target.value)}
       >
         {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
+          <option key={o.value} value={o.value}>
+            {o.label}
           </option>
         ))}
       </select>
