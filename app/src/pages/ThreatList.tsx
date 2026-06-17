@@ -22,14 +22,6 @@ import {
 
 type SevFilter = "all" | Severity;
 
-const SOURCE_LABEL: Record<string, string> = {
-  agent_config: "Agent 配置",
-  mcp: "MCP",
-  skill: "Skill",
-  knowledge: "知识库",
-  openclaw_audit: "OpenClaw 审计",
-};
-
 export interface ThreatListProps {
   findingId?: string;
   agentId?: string;
@@ -45,7 +37,7 @@ export function ThreatList({
   category,
   embedded,
 }: ThreatListProps) {
-  const { snapshot, ignoreThreat, unignoreThreat, readFile, lastError, clearError } = useApp();
+  const { snapshot, ignoreThreat, unignoreThreat, readFile, lastError, clearError, t, layer } = useApp();
 
   const baseFindings = useMemo(() => {
     if (!snapshot) return [];
@@ -117,12 +109,12 @@ export function ThreatList({
       if (catFilter !== "all" && f.category !== catFilter) return false;
       if (!agentId && agentFilter !== "all" && !f.agent_ids.includes(agentFilter)) return false;
       if (q) {
-        const hay = `${f.title} ${f.category} ${f.source} ${SOURCE_LABEL[f.source] || ""}`.toLowerCase();
+        const hay = `${f.title} ${f.category} ${layer.threatCategory(f.category)} ${f.source} ${layer.threatSource(f.source)}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [baseFindings, sevFilter, catFilter, agentFilter, agentId, query, snapshot]);
+  }, [baseFindings, sevFilter, catFilter, agentFilter, agentId, query, snapshot, layer]);
 
   const ignoredCount = useMemo(
     () => (snapshot ? baseFindings.filter((f) => isThreatIgnored(snapshot, f)).length : 0),
@@ -144,7 +136,7 @@ export function ThreatList({
       const res = await readFile(filePath);
       setFileView(res);
     } catch (e: any) {
-      setFileError(e?.message || "无法读取文件");
+      setFileError(e?.message || t("threatList.fileReadError"));
     } finally {
       setFileLoading(false);
     }
@@ -174,7 +166,7 @@ export function ThreatList({
     return (
       <main className={embedded ? undefined : "main flush"}>
         <div className="muted" style={{ padding: embedded ? "24px 0" : undefined }}>
-          暂无扫描结果，请先在「安全扫描」发起扫描。
+          {t("common.empty.noScanResult")}
         </div>
       </main>
     );
@@ -184,20 +176,20 @@ export function ThreatList({
     <>
       {!embedded && (
         <div className="page-title" style={{ fontSize: 20, marginBottom: 16 }}>
-          威胁管理
+          {t("threatList.title")}
         </div>
       )}
       {embedded && agentId && (
         <div className="dim" style={{ fontSize: 12.5, marginBottom: 12 }}>
-          仅显示 {agentName(agentId)} 的威胁事件
+          {t("threatList.agentScope", { name: agentName(agentId) })}
         </div>
       )}
 
       <div className="dim" style={{ fontSize: 12.5, marginBottom: 14 }}>
-        共 {activeCount} 项待处理威胁
-        {whitelistedCount > 0 && <> · {whitelistedCount} 项默认加白</>}
-        {ignoredCount > whitelistedCount && <> · {ignoredCount - whitelistedCount} 项已忽略</>}
-        {filtered.length !== baseFindings.length && <> · 当前筛选 {filtered.length} 项</>}
+        {t("threatList.metaActive", { count: activeCount })}
+        {whitelistedCount > 0 && <> · {t("threatList.metaWhitelisted", { count: whitelistedCount })}</>}
+        {ignoredCount > whitelistedCount && <> · {t("threatList.metaIgnored", { count: ignoredCount - whitelistedCount })}</>}
+        {filtered.length !== baseFindings.length && <> · {t("threatList.metaFiltered", { count: filtered.length })}</>}
       </div>
 
       <div className="card cve-toolbar" style={{ padding: "14px 16px", marginBottom: 14 }}>
@@ -207,21 +199,21 @@ export function ThreatList({
             value={sevFilter}
             onChange={(e) => setSevFilter(e.target.value as SevFilter)}
           >
-            <option value="all">全部风险</option>
-            <option value="high">高危</option>
-            <option value="medium">中危</option>
-            <option value="low">低危</option>
-            <option value="safe">已忽略</option>
+            <option value="all">{t("common.filter.allRisk")}</option>
+            <option value="high">{t("common.severity.high")}</option>
+            <option value="medium">{t("common.severity.medium")}</option>
+            <option value="low">{t("common.severity.low")}</option>
+            <option value="safe">{t("common.filter.ignored")}</option>
           </select>
           <select
             className="select-input cve-filter"
             value={catFilter}
             onChange={(e) => setCatFilter(e.target.value)}
           >
-            <option value="all">全部类别</option>
+            <option value="all">{t("common.filter.allCategory")}</option>
             {categories.map((c) => (
               <option key={c} value={c}>
-                {c}
+                {layer.threatCategory(c)}
               </option>
             ))}
           </select>
@@ -231,7 +223,7 @@ export function ThreatList({
               value={agentFilter}
               onChange={(e) => setAgentFilter(e.target.value)}
             >
-              <option value="all">全部 Agent</option>
+              <option value="all">{t("common.filter.allAgent")}</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -241,7 +233,7 @@ export function ThreatList({
           )}
           <input
             className="text-input cve-search"
-            placeholder="搜索威胁标题、类别…"
+            placeholder={t("threatList.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -251,18 +243,18 @@ export function ThreatList({
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {filtered.length === 0 ? (
           <div className="muted" style={{ padding: 48, textAlign: "center", fontSize: 13.5 }}>
-            {baseFindings.length === 0 ? "暂无威胁事件。" : "没有符合筛选条件的威胁事件。"}
+            {baseFindings.length === 0 ? t("threatList.emptyNone") : t("threatList.emptyNoMatch")}
           </div>
         ) : (
           <table className="data-table cve-list-table">
             <thead>
               <tr>
-                <th>威胁事件</th>
-                <th style={{ width: 100 }}>风险等级</th>
-                <th style={{ width: 120 }}>类别</th>
-                <th style={{ width: 110 }}>来源</th>
-                {!agentId && <th style={{ width: 130 }}>所属 Agent</th>}
-                <th style={{ width: 120 }}>操作</th>
+                <th>{t("threatList.tableEvent")}</th>
+                <th style={{ width: 100 }}>{t("common.table.riskLevel")}</th>
+                <th style={{ width: 120 }}>{t("common.table.category")}</th>
+                <th style={{ width: 110 }}>{t("common.table.source")}</th>
+                {!agentId && <th style={{ width: 130 }}>{t("common.table.agent")}</th>}
+                <th style={{ width: 120 }}>{t("common.table.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -282,29 +274,29 @@ export function ThreatList({
                     <span className="row" style={{ gap: 8 }}>
                       <IconShield size={16} style={{ color: "var(--purple-2)", flexShrink: 0 }} />
                       <span style={{ fontWeight: 600 }}>{f.title}</span>
-                      {pathWhitelisted && <span className="tag tag-muted">默认加白</span>}
-                      {!pathWhitelisted && ignored && <span className="tag tag-muted">已忽略</span>}
+                      {pathWhitelisted && <span className="tag tag-muted">{t("common.tag.whitelisted")}</span>}
+                      {!pathWhitelisted && ignored && <span className="tag tag-muted">{t("common.tag.ignored")}</span>}
                     </span>
                   </td>
                   <td>
                     <SeverityPill sev={sev} />
                   </td>
-                  <td className="muted">{f.category}</td>
+                  <td className="muted">{layer.threatCategory(f.category)}</td>
                   <td className="dim" style={{ fontSize: 12.5 }}>
-                    {SOURCE_LABEL[f.source] || f.source}
+                    {layer.threatSource(f.source)}
                   </td>
                   {!agentId && <td className="muted">{agentsLabel(f)}</td>}
                   <td onClick={(e) => e.stopPropagation()}>
-                    <span className="act-link" onClick={() => openModal(f)}>查看</span>
+                    <span className="act-link" onClick={() => openModal(f)}>{t("common.action.view")}</span>
                     {!ignored ? (
                       <>
                         <span className="dim" style={{ margin: "0 6px" }}>|</span>
-                        <span className="act-link dim" onClick={() => setConfirmIgnore(f)}>忽略</span>
+                        <span className="act-link dim" onClick={() => setConfirmIgnore(f)}>{t("common.action.ignore")}</span>
                       </>
                     ) : manuallyIgnored ? (
                       <>
                         <span className="dim" style={{ margin: "0 6px" }}>|</span>
-                        <span className="act-link" onClick={() => handleUnignore(f)}>恢复</span>
+                        <span className="act-link" onClick={() => handleUnignore(f)}>{t("common.action.restore")}</span>
                       </>
                     ) : null}
                   </td>
@@ -333,9 +325,9 @@ export function ThreatList({
       {confirmIgnore &&
         createPortal(
           <ConfirmModal
-            title="忽略此威胁"
-            message={`将「${confirmIgnore.title}」加入忽略列表，风险等级将标记为安全，概览统计会同步更新。`}
-            confirmLabel="确认忽略"
+            title={t("threatList.ignoreTitle")}
+            message={t("threatList.ignoreMessage", { title: confirmIgnore.title })}
+            confirmLabel={t("threatList.ignoreConfirm")}
             danger
             onConfirm={() => handleIgnore(confirmIgnore)}
             onCancel={() => setConfirmIgnore(null)}
@@ -386,6 +378,7 @@ function ThreatDetailModal({
   onUnignore: () => void;
   onOpenFile: (path: string) => void;
 }) {
+  const { t, layer } = useApp();
   const locations =
     finding.locations?.length ? finding.locations : finding.location ? [finding.location] : [];
   const pathWhitelisted = isThreatPathWhitelisted(finding);
@@ -403,8 +396,8 @@ function ThreatDetailModal({
               {finding.title}
             </div>
             <SeverityPill sev={sev} />
-            {pathWhitelisted && <span className="tag tag-muted">默认加白</span>}
-            {!pathWhitelisted && ignored && <span className="tag tag-muted">已忽略</span>}
+            {pathWhitelisted && <span className="tag tag-muted">{t("common.tag.whitelisted")}</span>}
+            {!pathWhitelisted && ignored && <span className="tag tag-muted">{t("common.tag.ignored")}</span>}
           </div>
           <button className="modal-close" type="button" onClick={onClose}>
             ×
@@ -412,32 +405,34 @@ function ThreatDetailModal({
         </div>
 
         <div className="row cve-modal-meta" style={{ gap: 28, flexWrap: "wrap" }}>
-          <Meta label="类别" value={finding.category} />
-          <Meta label="来源" value={SOURCE_LABEL[finding.source] || finding.source} />
+          <Meta label={t("common.table.category")} value={layer.threatCategory(finding.category)} />
+          <Meta label={t("common.table.source")} value={layer.threatSource(finding.source)} />
           <Meta
-            label="受影响 Agent"
-            value={finding.agent_ids.map((id) => agentName(id)).join("、") || "—"}
+            label={t("threatList.affectedAgents")}
+            value={finding.agent_ids.map((id) => agentName(id)).join(layer.listSeparator()) || "—"}
           />
         </div>
 
         <div className="cve-modal-body">
           <div className="detail-block" style={{ marginTop: 0 }}>
             <div className="h">
-              <IconAlert className="ic" size={16} /> 影响
+              <IconAlert className="ic" size={16} /> {t("threatList.impact")}
             </div>
             <div className="muted" style={{ lineHeight: 1.8 }}>
-              {finding.impact}
+              {layer.threatImpact(finding.category, finding.impact)}
             </div>
           </div>
 
           <div className="detail-block">
             <div className="h">
-              <IconFile className="ic" size={16} /> 证据
+              <IconFile className="ic" size={16} /> {t("threatList.evidence")}
             </div>
             {locations.length > 0 && (
               <div style={{ marginBottom: 10 }}>
                 <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
-                  命中位置{locations.length > 1 ? `（${locations.length}）` : ""}
+                  {locations.length > 1
+                    ? t("threatList.hitLocationCount", { count: locations.length })
+                    : t("threatList.hitLocation")}
                 </div>
                 <ul className="threat-location-list">
                   {locations.map((loc) => (
@@ -446,7 +441,7 @@ function ThreatDetailModal({
                         type="button"
                         className="threat-location-link mono"
                         onClick={() => onOpenFile(loc)}
-                        title="查看原文"
+                        title={t("threatList.viewOriginal")}
                       >
                         {loc}
                         <IconExternal size={12} />
@@ -456,49 +451,51 @@ function ThreatDetailModal({
                 </ul>
               </div>
             )}
-            <div className="evidence mono">{finding.evidence}</div>
+            <div className="evidence mono">{layer.threatEvidence(finding.evidence)}</div>
           </div>
 
           <div className="detail-block">
             <div className="row">
               <div className="h" style={{ marginBottom: 0 }}>
-                <IconShield className="ic" size={16} /> 推荐操作
+                <IconShield className="ic" size={16} /> {t("threatList.recommendation")}
               </div>
               <div className="spacer" />
               <button className="btn btn-primary btn-sm" type="button">
                 <span className="row" style={{ gap: 6 }}>
-                  查看修复指南 <IconExternal size={13} />
+                  {t("threatList.fixGuide")} <IconExternal size={13} />
                 </span>
               </button>
             </div>
             <div className="muted" style={{ lineHeight: 1.8, marginTop: 9 }}>
-              {finding.recommendation}
+              {layer.threatRecommendation(finding.category, finding.recommendation)}
             </div>
           </div>
 
           <div className="detail-block detail-block-plain">
-            <div className="h">通俗说明（给普通用户）</div>
-            <div className="plain-text">{finding.plain_explanation}</div>
+            <div className="h">{t("threatList.plainExplanation")}</div>
+            <div className="plain-text">
+              {layer.threatPlainExplanation(finding.category, finding.plain_explanation)}
+            </div>
           </div>
         </div>
 
         <div className="modal-foot threat-modal-foot">
           {!ignored ? (
             <button type="button" className="btn btn-sm" onClick={onIgnore}>
-              忽略此威胁
+              {t("threatList.ignoreThreat")}
             </button>
           ) : manuallyIgnored ? (
             <button type="button" className="btn btn-sm" onClick={onUnignore}>
-              取消忽略
+              {t("threatList.unignore")}
             </button>
           ) : (
             <span className="dim" style={{ fontSize: 12.5 }}>
-              位于 red-teaming 目录，已默认加白
+              {t("threatList.autoWhitelisted")}
             </span>
           )}
           <div className="spacer" />
           <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>
-            关闭
+            {t("common.action.close")}
           </button>
         </div>
       </div>
@@ -521,12 +518,13 @@ function FileContentModal({
   error?: string | null;
   onClose: () => void;
 }) {
+  const { t } = useApp();
   return (
     <div className="modal-mask" style={{ zIndex: 60 }} onClick={onClose}>
       <div className="modal modal-lg file-content-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div className="modal-title" style={{ fontSize: 15 }}>
-            原文查看
+            {t("threatList.fileTitle")}
           </div>
           <button className="modal-close" type="button" onClick={onClose}>
             ×
@@ -537,7 +535,7 @@ function FileContentModal({
             {path}
           </div>
         )}
-        {loading && <div className="muted" style={{ padding: "24px 0" }}>正在读取…</div>}
+        {loading && <div className="muted" style={{ padding: "24px 0" }}>{t("threatList.fileLoading")}</div>}
         {error && !loading && (
           <div className="muted" style={{ padding: "24px 0", color: "var(--high)" }}>{error}</div>
         )}
@@ -545,7 +543,7 @@ function FileContentModal({
           <>
             {truncated && (
               <div className="dim" style={{ fontSize: 12, marginBottom: 8 }}>
-                文件较大，仅显示前 256KB
+                {t("threatList.fileTruncated")}
               </div>
             )}
             <pre className="evidence mono file-content-body">{content}</pre>
@@ -553,7 +551,7 @@ function FileContentModal({
         )}
         <div className="modal-foot">
           <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>
-            关闭
+            {t("common.action.close")}
           </button>
         </div>
       </div>

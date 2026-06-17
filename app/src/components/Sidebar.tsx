@@ -10,7 +10,7 @@ import {
 } from "./Icons";
 
 export function Sidebar() {
-  const { route, navigate, snapshot } = useApp();
+  const { route, navigate, snapshot, t } = useApp();
   const name = route.name;
 
   const isScan =
@@ -46,30 +46,30 @@ export function Sidebar() {
       <nav className="nav">
         <div className={`nav-item ${isScan ? "active" : ""}`} onClick={goScan}>
           <IconScan className="icon" />
-          <span>安全扫描</span>
+          <span>{t("sidebar.scan")}</span>
         </div>
         <div
           className={`nav-item ${isThreat ? "active" : ""}${!snapshot ? " disabled" : ""}`}
           onClick={goThreat}
-          title={!snapshot ? "请先完成扫描" : undefined}
+          title={!snapshot ? t("sidebar.scanRequired") : undefined}
         >
           <IconShield className="icon" />
-          <span>威胁管理</span>
+          <span>{t("sidebar.threats")}</span>
         </div>
         <div
           className={`nav-item ${isVuln ? "active" : ""}${!snapshot ? " disabled" : ""}`}
           onClick={goVuln}
-          title={!snapshot ? "请先完成扫描" : undefined}
+          title={!snapshot ? t("sidebar.scanRequired") : undefined}
         >
           <IconCube className="icon" />
-          <span>漏洞管理</span>
+          <span>{t("sidebar.vulns")}</span>
         </div>
         <div
           className={`nav-item ${isAssets ? "active" : ""}`}
           onClick={() => navigate({ name: "agent-list" })}
         >
           <IconAssets className="icon" />
-          <span>资产管理</span>
+          <span>{t("sidebar.assets")}</span>
         </div>
       </nav>
 
@@ -79,7 +79,7 @@ export function Sidebar() {
           onClick={() => navigate({ name: "settings" })}
         >
           <IconSettings className="icon" />
-          <span>设置</span>
+          <span>{t("sidebar.settings")}</span>
         </div>
       </div>
     </aside>

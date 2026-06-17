@@ -11,7 +11,7 @@ import { AgentWorkbench } from "./pages/AgentWorkbench";
 import { Settings } from "./pages/Settings";
 
 export function App() {
-  const { route, lastError, clearError } = useApp();
+  const { route, lastError, clearError, t } = useApp();
 
   let page: React.ReactNode;
   switch (route.name) {
@@ -74,7 +74,8 @@ export function App() {
       {page}
       {lastError && (
         <div className="toast" onClick={clearError}>
-          {lastError}（点击关闭）
+          {lastError}
+          {t("common.toastDismiss")}
         </div>
       )}
     </div>

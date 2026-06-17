@@ -2,6 +2,7 @@
 name = "agentsec-engine"
 version = "0.1.0"
 description = "agentSec local scan engine: exposure (ATR) + CVE (OSV) + asset management"
+license = { text = "AGPL-3.0" }
 requires-python = ">=3.10"
 dependencies = [
     # 暴露面引擎：pyATR（内置 ATR 规则，Layer1 regex/pattern，离线）

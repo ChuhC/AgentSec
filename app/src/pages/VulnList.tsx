@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useApp } from "../store";
 import { vulnerableComponentRows, type VulnComponentRow } from "../selectors";
-import { SeverityPill } from "../components/common";
+import { SeverityPill, useSeverityLabels } from "../components/common";
 import type { CVEItem, Severity } from "../types";
 import {
   IconChevron,
@@ -25,7 +25,7 @@ export function VulnList({
   severity,
   embedded,
 }: VulnListProps) {
-  const { snapshot } = useApp();
+  const { snapshot, t, layer } = useApp();
   const cveUnavailable = snapshot?.meta.cve_status === "unavailable";
   const scannedCount = snapshot?.meta.cve_scanned_count;
 
@@ -96,7 +96,7 @@ export function VulnList({
   if (!snapshot) {
     return (
       <main className={embedded ? undefined : "main flush"}>
-        <div className="muted">暂无扫描结果，请先在「安全扫描」发起扫描。</div>
+        <div className="muted">{t("common.empty.noScanResult")}</div>
       </main>
     );
   }
@@ -104,9 +104,9 @@ export function VulnList({
   if (cveUnavailable) {
     const unavailable = (
       <div className="card" style={{ padding: 40, textAlign: "center" }}>
-        <div className="muted">CVE 检测不可用：组件漏洞检测需要联网，当前网络不可用。</div>
+        <div className="muted">{t("vulnList.cveUnavailable")}</div>
         <div className="dim" style={{ marginTop: 8, fontSize: 13 }}>
-          威胁扫描结果不受影响。
+          {t("vulnList.cveUnavailableNote")}
         </div>
       </div>
     );
@@ -114,7 +114,7 @@ export function VulnList({
     return (
       <main className="main flush">
         <div className="page-title" style={{ fontSize: 20, marginBottom: 16 }}>
-          漏洞管理
+          {t("vulnList.title")}
         </div>
         {unavailable}
       </main>
@@ -125,19 +125,19 @@ export function VulnList({
     <>
       {!embedded && (
         <div className="page-title" style={{ fontSize: 20, marginBottom: 16 }}>
-          漏洞管理
+          {t("vulnList.title")}
         </div>
       )}
       {embedded && agentId && (
         <div className="dim" style={{ fontSize: 12.5, marginBottom: 12 }}>
-          仅显示 {agents.find((a) => a.id === agentId)?.name || agentId} 的组件漏洞
+          {t("vulnList.agentScope", { name: agents.find((a) => a.id === agentId)?.name || agentId })}
         </div>
       )}
 
       <div className="dim" style={{ fontSize: 12.5, marginBottom: 14 }}>
-        {scannedCount != null && <>已扫描 {scannedCount} 个组件 · </>}
-        {scopedRows.length} 个组件存在已知 CVE
-        {filtered.length !== scopedRows.length && <> · 当前筛选 {filtered.length} 项</>}
+        {scannedCount != null && <>{t("vulnList.metaScanned", { count: scannedCount })} · </>}
+        {t("vulnList.metaWithCve", { count: scopedRows.length })}
+        {filtered.length !== scopedRows.length && <> · {t("threatList.metaFiltered", { count: filtered.length })}</>}
       </div>
 
       <div className="card cve-toolbar" style={{ padding: "14px 16px", marginBottom: 14 }}>
@@ -147,10 +147,10 @@ export function VulnList({
             value={sevFilter}
             onChange={(e) => setSevFilter(e.target.value as SevFilter)}
           >
-            <option value="all">全部风险</option>
-            <option value="high">高危</option>
-            <option value="medium">中危</option>
-            <option value="low">低危</option>
+            <option value="all">{t("common.filter.allRisk")}</option>
+            <option value="high">{t("common.severity.high")}</option>
+            <option value="medium">{t("common.severity.medium")}</option>
+            <option value="low">{t("common.severity.low")}</option>
           </select>
           {!agentId && (
             <select
@@ -158,7 +158,7 @@ export function VulnList({
               value={agentFilter}
               onChange={(e) => setAgentFilter(e.target.value)}
             >
-              <option value="all">全部 Agent</option>
+              <option value="all">{t("common.filter.allAgent")}</option>
               {agents.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -168,7 +168,7 @@ export function VulnList({
           )}
           <input
             className="text-input cve-search"
-            placeholder="搜索组件名称…"
+            placeholder={t("vulnList.searchPlaceholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -178,21 +178,19 @@ export function VulnList({
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {filtered.length === 0 ? (
           <div className="muted" style={{ padding: 48, textAlign: "center", fontSize: 13.5 }}>
-            {scopedRows.length === 0
-              ? "暂无存在已知 CVE 的组件。"
-              : "没有符合筛选条件的组件。"}
+            {scopedRows.length === 0 ? t("vulnList.emptyNone") : t("vulnList.emptyNoMatch")}
           </div>
         ) : (
           <table className="data-table cve-list-table">
             <thead>
               <tr>
-                <th>组件名称</th>
-                <th style={{ width: 100 }}>风险等级</th>
-                <th style={{ width: 80 }}>CVE 数</th>
-                <th style={{ width: 120 }}>当前版本</th>
-                <th style={{ width: 120 }}>建议版本</th>
-                {!agentId && <th style={{ width: 130 }}>所属 Agent</th>}
-                <th style={{ width: 72 }}>操作</th>
+                <th>{t("vulnList.tableComponent")}</th>
+                <th style={{ width: 100 }}>{t("common.table.riskLevel")}</th>
+                <th style={{ width: 80 }}>{t("vulnList.tableCveCount")}</th>
+                <th style={{ width: 120 }}>{t("vulnList.tableCurrentVersion")}</th>
+                <th style={{ width: 120 }}>{t("vulnList.tableRecommendedVersion")}</th>
+                {!agentId && <th style={{ width: 130 }}>{t("common.table.agent")}</th>}
+                <th style={{ width: 72 }}>{t("common.table.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -212,7 +210,7 @@ export function VulnList({
                   <td className="mono dim">{r.fixedVersion || "—"}</td>
                   {!agentId && <td className="muted">{r.agentName}</td>}
                   <td>
-                    <span className="act-link">查看</span>
+                    <span className="act-link">{t("common.action.view")}</span>
                   </td>
                 </tr>
               ))}
@@ -255,6 +253,8 @@ function ComponentModal({
   onToggleCve: (cveId: string) => void;
   onClose: () => void;
 }) {
+  const { t, layer } = useApp();
+  const { label: sevLabel } = useSeverityLabels();
   const selected: CVEItem | undefined = selCve
     ? row.cves.find((c) => c.cve_id === selCve)
     : undefined;
@@ -282,15 +282,15 @@ function ComponentModal({
         </div>
 
         <div className="row cve-modal-meta" style={{ gap: 28, flexWrap: "wrap" }}>
-          <Meta label="所属 Agent" value={row.agentName} />
-          <Meta label="包生态" value={row.ecosystem} />
-          <Meta label="CVE 数量" value={String(row.cveCount)} />
-          <Meta label="修复版本" value={row.fixedVersion || "—"} />
+          <Meta label={t("vulnList.detailAgent")} value={row.agentName} />
+          <Meta label={t("vulnList.detailEcosystem")} value={row.ecosystem} />
+          <Meta label={t("vulnList.detailCveCount")} value={String(row.cveCount)} />
+          <Meta label={t("vulnList.detailFixedVersion")} value={row.fixedVersion || "—"} />
         </div>
 
         <div className="cve-modal-body cve-modal-body-stack">
           <div className="cve-modal-list">
-            <div className="cve-modal-list-head">CVE 列表</div>
+            <div className="cve-modal-list-head">{t("vulnList.cveList")}</div>
             <div className="cve-modal-cve-rows">
               {row.cves.map((v) => (
                 <div
@@ -303,7 +303,7 @@ function ComponentModal({
                   </span>
                   <SeverityPill sev={v.severity} />
                   <span style={{ fontWeight: 700, fontSize: 13 }}>{v.cvss.toFixed(1)}</span>
-                  <span className="muted cve-modal-cve-summary">{v.summary}</span>
+                  <span className="muted cve-modal-cve-summary">{layer.cveSummary(v.summary)}</span>
                   <IconChevron
                     size={14}
                     className="dim"
@@ -319,7 +319,7 @@ function ComponentModal({
 
           {selected && (
             <div className="cve-modal-detail cve-modal-detail-stack">
-              <div className="cve-modal-list-head">漏洞详情</div>
+              <div className="cve-modal-list-head">{t("vulnList.vulnDetail")}</div>
               <div className="cve-modal-detail-body">
                 <div className="row" style={{ gap: 10, marginBottom: 12 }}>
                   <span className="mono" style={{ fontSize: 16, fontWeight: 700 }}>
@@ -328,23 +328,16 @@ function ComponentModal({
                   <SeverityPill sev={selected.severity} />
                 </div>
                 <div className="row" style={{ gap: 24, marginBottom: 16 }}>
-                  <Meta label="CVSS 评分" value={selected.cvss.toFixed(1)} />
-                  <Meta
-                    label="威胁级别"
-                    value={
-                      selected.severity === "high"
-                        ? "高危"
-                        : selected.severity === "medium"
-                        ? "中危"
-                        : "低危"
-                    }
-                  />
+                  <Meta label={t("vulnList.cvss")} value={selected.cvss.toFixed(1)} />
+                  <Meta label={t("vulnList.threatLevel")} value={sevLabel(selected.severity)} />
                 </div>
                 <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
-                  简要描述
+                  {t("vulnList.summary")}
                 </div>
                 <div className="muted" style={{ lineHeight: 1.75, fontSize: 13.5 }}>
-                  {selected.summary || "暂无描述"}
+                  {selected.summary
+                    ? layer.cveSummary(selected.summary)
+                    : t("common.empty.noDescription")}
                 </div>
               </div>
             </div>
@@ -355,19 +348,19 @@ function ComponentModal({
           <div className="row" style={{ marginBottom: 8 }}>
             <span className="row" style={{ gap: 6, fontWeight: 600, fontSize: 13.5 }}>
               <IconShield size={15} style={{ color: "var(--purple-2)" }} />
-              升级建议
+              {t("vulnList.upgradeAdvice")}
             </span>
             <div className="spacer" />
             {row.fixedVersion && (
               <button className="btn btn-primary btn-sm" type="button">
                 <span className="row" style={{ gap: 6 }}>
-                  查看升级指南 <IconExternal size={13} />
+                  {t("vulnList.upgradeGuide")} <IconExternal size={13} />
                 </span>
               </button>
             )}
           </div>
           <div className="muted" style={{ lineHeight: 1.75, fontSize: 13 }}>
-            {row.upgradeAdvice}
+            {layer.upgradeAdvice(row.upgradeAdvice, row.fixedVersion)}
           </div>
         </div>
       </div>

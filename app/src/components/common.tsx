@@ -1,7 +1,9 @@
 import React from "react";
 import type { Severity } from "../types";
+import { useApp } from "../store";
 import { IconAlert, IconCheck } from "./Icons";
 
+/** @deprecated Use useSeverityLabels() — kept as non-React fallback */
 export const SEV_LABEL: Record<Severity, string> = {
   high: "高危",
   medium: "中危",
@@ -10,6 +12,7 @@ export const SEV_LABEL: Record<Severity, string> = {
   info: "信息",
 };
 
+/** @deprecated Use useSeverityLabels() — kept as non-React fallback */
 export const SEV_RISK_LABEL: Record<Severity, string> = {
   high: "高风险",
   medium: "中风险",
@@ -18,6 +21,14 @@ export const SEV_RISK_LABEL: Record<Severity, string> = {
   info: "信息",
 };
 
+export function useSeverityLabels() {
+  const { t } = useApp();
+  return {
+    label: (sev: Severity) => t(`common.severity.${sev}`),
+    risk: (sev: Severity) => t(`common.risk.${sev}`),
+  };
+}
+
 export function SeverityPill({
   sev,
   label,
@@ -25,7 +36,8 @@ export function SeverityPill({
   sev: Severity;
   label?: string;
 }) {
-  return <span className={`sev sev-${sev}`}>{label ?? SEV_LABEL[sev]}</span>;
+  const { label: sevLabel } = useSeverityLabels();
+  return <span className={`sev sev-${sev}`}>{label ?? sevLabel(sev)}</span>;
 }
 
 export function SeverityDot({ sev }: { sev: Severity }) {
@@ -80,6 +92,7 @@ export function ConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useApp();
   return (
     <div className="modal-mask confirm-modal-mask" onClick={onCancel}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -94,7 +107,7 @@ export function ConfirmModal({
         </div>
         <div className="modal-foot">
           <button className="btn" onClick={onCancel}>
-            取消
+            {t("common.action.cancel")}
           </button>
           <button
             className={danger ? "btn btn-primary" : "btn btn-primary"}
