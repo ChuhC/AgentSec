@@ -74,7 +74,8 @@ interface AppState {
   disableAsset: (id: string) => Promise<void>;
   enableAsset: (id: string) => Promise<void>;
   uninstallAsset: (id: string) => Promise<void>;
-  refreshAgentAssets: (agentId: string) => Promise<void>;
+  refreshAgentAssets: (agentId: string) => Promise<ScanSnapshot | null>;
+  updateAgent: (agentId: string) => Promise<void>;
   fetchAgentRuntime: (agentId: string) => Promise<AgentRuntime | null>;
   ignoreThreat: (findingKey: string) => Promise<void>;
   unignoreThreat: (findingKey: string) => Promise<void>;
@@ -254,12 +255,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [t]
   );
 
-  const refreshAgentAssets = useCallback(async (agentId: string) => {
+  const refreshAgentAssets = useCallback(async (agentId: string): Promise<ScanSnapshot | null> => {
     try {
-      const res = await window.agentsec.request("agent.refresh", { agentId });
-      if (res?.snapshot) setSnapshot(res.snapshot);
+      const res = await window.agentsec.request("agent.refresh", {
+        agentId,
+        forceUpdateCheck: true,
+      });
+      if (res?.snapshot) {
+        setSnapshot(res.snapshot);
+        return res.snapshot as ScanSnapshot;
+      }
+      return null;
     } catch (e: any) {
       setLastError(e?.message || t("errors.refreshAssetsFailed"));
+      return null;
+    }
+  }, [t]);
+
+  const updateAgent = useCallback(async (agentId: string) => {
+    try {
+      const res = await window.agentsec.request("agent.update", { agentId });
+      if (res?.snapshot) setSnapshot(res.snapshot);
+    } catch (e: any) {
+      setLastError(e?.message || t("errors.updateAgentFailed"));
+      throw e;
     }
   }, [t]);
 
@@ -321,6 +340,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       enableAsset: (id) => doAssetOp("asset.enable", id),
       uninstallAsset: (id) => doAssetOp("asset.uninstall", id),
       refreshAgentAssets,
+      updateAgent,
       fetchAgentRuntime,
       ignoreThreat,
       unignoreThreat,
@@ -328,7 +348,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       lastError,
       clearError,
     }),
-    [route, snapshot, scanState, progress, scanError, settings, locale, t, layer, lastError, refreshAgentAssets, fetchAgentRuntime, ignoreThreat, unignoreThreat, readFile]
+    [route, snapshot, scanState, progress, scanError, settings, locale, t, layer, lastError, refreshAgentAssets, updateAgent, fetchAgentRuntime, ignoreThreat, unignoreThreat, readFile]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

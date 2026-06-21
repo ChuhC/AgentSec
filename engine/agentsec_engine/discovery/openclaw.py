@@ -7,7 +7,9 @@
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 from typing import List, Optional, Tuple
 
 from ..models import Agent, Asset, AssetStatus, AssetType, FindingSource
@@ -55,15 +57,10 @@ class OpenClawAdapter(AgentAdapter):
                 extra = plat.get("extra") or {}
                 if extra.get("port"):
                     ports.append(str(extra["port"]))
-        ver_raw = data.get("version") or ""
+        ver_raw = parsers.resolve_openclaw_installed_version(data.get("version"))
         return Agent(
             id="openclaw", name="OpenClaw", kind="openclaw",
-            version="v" + str(ver_raw) if ver_raw else "",
-            latest_version=(
-                "v" + str(data["latest_version"])
-                if data.get("latest_version")
-                else None
-            ),
+            version=ver_raw,
             listen_ports=ports,
             enabled=True, description=desc,
             permissions=[parsers.perm("a-o-net", "network", SRC.AGENT_CONFIG, "Agent 默认")],
@@ -75,7 +72,114 @@ class OpenClawAdapter(AgentAdapter):
             return []
         sp = getattr(self, "_settings_path_cache", None) or self._real_config_path(home)
         data = parsers.read_json(sp) or {} if sp else {}
-        return self._mcp(home, data, sp) + self._skills(home) + self._deps(home)
+        cfg_path = sp or os.path.join(home, "openclaw.json")
+        return (
+            self._mcp(home, data, sp)
+            + self._discover_skills(home, data)
+            + self._deps(home, data)
+            + parsers.discover_channels(
+                "openclaw",
+                "OpenClaw",
+                data,
+                cfg_path,
+                roots=("channels", "platforms"),
+            )
+        )
+
+    def _discover_skills(self, home: str, data: dict) -> List[Asset]:
+        roots = parsers.openclaw_skill_roots(home, data)
+        roots = self._extend_skill_roots_from_cli(roots)
+        assets = parsers.discover_skills_in_roots("openclaw", "OpenClaw", roots)
+        return self._merge_skills_cli(assets)
+
+    def _extend_skill_roots_from_cli(
+        self, roots: List[Tuple[str, str]]
+    ) -> List[Tuple[str, str]]:
+        """用 openclaw skills list --json 补齐 workspace / managed 根目录。"""
+        cli = parsers.resolve_openclaw_cli()
+        if not cli:
+            return roots
+        try:
+            proc = subprocess.run(
+                [cli, "skills", "list", "--json"],
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return roots
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return roots
+        try:
+            payload = json.loads(proc.stdout)
+        except ValueError:
+            return roots
+
+        seen = {os.path.realpath(p) for p, _ in roots if os.path.isdir(p)}
+        extra: List[Tuple[str, str]] = []
+
+        def add(path: Optional[str], label: str) -> None:
+            if not path:
+                return
+            real = os.path.realpath(os.path.expanduser(path))
+            if real in seen or not os.path.isdir(real):
+                return
+            seen.add(real)
+            extra.append((real, label))
+
+        ws = payload.get("workspaceDir")
+        if ws:
+            add(os.path.join(str(ws), "skills"), "workspace")
+            add(os.path.join(str(ws), ".agents", "skills"), "project-agent")
+        managed = payload.get("managedSkillsDir")
+        if managed:
+            add(str(managed), "managed")
+        return extra + roots
+
+    def _merge_skills_cli(self, assets: List[Asset]) -> List[Asset]:
+        """用 openclaw skills list --json 同步 disabled / 来源等运行时状态。"""
+        cli = parsers.resolve_openclaw_cli()
+        if not cli:
+            return assets
+        try:
+            proc = subprocess.run(
+                [cli, "skills", "list", "--json"],
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return assets
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return assets
+        try:
+            payload = json.loads(proc.stdout)
+        except ValueError:
+            return assets
+        meta_by_name = {
+            str(s.get("name")): s
+            for s in (payload.get("skills") or [])
+            if s.get("name")
+        }
+        for asset in assets:
+            meta = meta_by_name.get(asset.name)
+            if not meta:
+                continue
+            if meta.get("disabled"):
+                asset.status = ST.DISABLED.value
+            src = str(meta.get("source") or "").strip()
+            if src and src not in (asset.purpose or ""):
+                asset.purpose = f"{(asset.purpose or '本机技能').split('（来源：')[0]}（来源：{src}）"
+            if meta.get("eligible") is False and asset.status != ST.DISABLED.value:
+                missing = meta.get("missing") or {}
+                hints: List[str] = []
+                for key in ("bins", "anyBins", "env", "config"):
+                    vals = missing.get(key) or []
+                    if vals:
+                        hints.append(f"{key}: {', '.join(str(v) for v in vals[:3])}")
+                if hints:
+                    asset.purpose = f"{asset.purpose}（待配置：{'; '.join(hints)}）"
+        return assets
 
     def _mcp(self, home: str, data: dict, cfg_path: Optional[str]) -> List[Asset]:
         out: List[Asset] = []
@@ -83,7 +187,6 @@ class OpenClawAdapter(AgentAdapter):
         for name, srv in (data.get("mcp_servers") or {}).items():
             if not isinstance(srv, dict):
                 continue
-            cmd = " ".join([str(srv.get("command", ""))] + [str(a) for a in srv.get("args", [])]).strip()
             perms = parsers.perms_from_mcp_server(name, srv)
             disabled = srv.get("enabled") is False
             npm_pkg = parsers.parse_mcp_npm_package(srv)
@@ -97,7 +200,7 @@ class OpenClawAdapter(AgentAdapter):
                 name=name,
                 version=version,
                 status=ST.DISABLED.value if disabled else ST.ENABLED.value,
-                purpose=f"MCP 服务：{cmd}" if cmd else "MCP 服务",
+                purpose=parsers.describe_mcp_purpose(name, srv),
                 source="OpenClaw",
                 permissions=perms,
                 path=cfg_path,
@@ -110,59 +213,19 @@ class OpenClawAdapter(AgentAdapter):
             ))
         return out
 
-    def _skills(self, home: str) -> List[Asset]:
-        skills_dir = os.path.join(home, "skills")
-        if not os.path.isdir(skills_dir):
-            return []
-        out: List[Asset] = []
-        for root, _dirs, files in os.walk(skills_dir):
-            disabled = "SKILL.md.disabled" in files
-            if "SKILL.md" not in files and not disabled:
-                continue
-            fname = "SKILL.md.disabled" if disabled else "SKILL.md"
-            md = os.path.join(root, fname)
-            fm = parsers.parse_skill_frontmatter(md)
-            rel = os.path.relpath(root, skills_dir).replace(os.sep, "/")
-            name = fm.get("name") or os.path.basename(root)
-            perms = parsers.perms_from_skill_frontmatter(rel.replace("/", "-"), name, fm)
-            out.append(Asset(
-                id=f"openclaw-skill-{rel}",
-                agent_id="openclaw",
-                type=AT.SKILL.value,
-                name=name,
-                version=str(fm.get("version", "")) or None,
-                status=ST.DISABLED.value if disabled else ST.ENABLED.value,
-                purpose=str(fm.get("description", "")) or "本机技能",
-                source="OpenClaw",
-                permissions=perms,
-                path=md,
-                can_disable=True,
-                can_uninstall=False,
-            ))
-        out.sort(key=lambda a: a.name.lower())
-        return out
-
-    def _deps(self, home: str) -> List[Asset]:
-        out: List[Asset] = []
-        for name in ("requirements.txt", "pyproject.toml"):
-            path = os.path.join(home, name)
-            if name == "requirements.txt":
-                out.extend(parsers.deps_from_requirements(path, "openclaw"))
-            elif os.path.isfile(path):
-                out.extend(parsers.deps_from_pyproject(path, "openclaw"))
-        for d in out:
-            if d.ecosystem == "PyPI":
-                d.manager = "pip"
-                d.install_path = home
-                d.package_name = d.name
-                d.can_update = True
-                d.can_uninstall = True
-            d.can_disable = False
-        return out
-
     def atr_targets(self, agent: Agent) -> List[Tuple[str, str]]:
         home = getattr(self, "_home", None) or self.resolve_home()
         if not home:
             return []
         sp = getattr(self, "_settings_path_cache", None) or self._real_config_path(home)
-        return [(sp, SRC.AGENT_CONFIG.value)] if sp else []
+        out: List[Tuple[str, str]] = []
+        if sp:
+            out.append((sp, SRC.AGENT_CONFIG.value))
+        data = parsers.read_json(sp) or {} if sp else {}
+        for skill in self._discover_skills(home, data):
+            if skill.path and os.path.isfile(skill.path):
+                out.append((skill.path, SRC.SKILL.value))
+        return out
+
+    def _deps(self, home: str, _data: dict) -> List[Asset]:
+        return parsers.discover_openclaw_dependencies(home)

@@ -29,6 +29,7 @@ def discover_agent(
     agent_id: str,
     scope_path: Optional[str] = None,
     online: bool = True,
+    force_update_check: bool = False,
 ) -> tuple:
     """重新发现单个 Agent，返回 (agent, assets, status)。"""
     cls = _ADAPTER_BY_KIND.get(agent_id)
@@ -41,7 +42,7 @@ def discover_agent(
             return None, [], "not_found"
         assets = adapter.discover_assets(agent)
         homes = {agent.id: adapter.resolve_home()} if adapter.resolve_home() else {}
-        enrich_discovery([agent], assets, homes=homes, online=online)
+        enrich_discovery([agent], assets, homes=homes, online=online, force_update_check=force_update_check)
         return agent, assets, "ok"
     except Exception as exc:  # noqa: BLE001
         return None, [], "error: " + str(exc)

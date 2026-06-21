@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
 from typing import Dict, List, Optional, Tuple
 
 import yaml
@@ -164,6 +166,265 @@ def parse_skill_frontmatter(path: str) -> Dict:
         return data if isinstance(data, dict) else {}
     except yaml.YAMLError:
         return {}
+
+
+def _skill_name_slug(name: str) -> str:
+    return re.sub(r"[^\w-]", "-", str(name).lower()).strip("-")[:80] or "skill"
+
+
+def discover_skills_in_roots(
+    agent_id: str,
+    source: str,
+    roots: List[Tuple[str, str]],
+) -> List[Asset]:
+    """在多个 skill 根目录中发现 SKILL.md（按 roots 顺序，同名技能高优先级覆盖）。"""
+    by_name: Dict[str, Asset] = {}
+
+    for root, root_label in roots:
+        if not os.path.isdir(root):
+            continue
+        for dirpath, _dirs, files in os.walk(root, followlinks=True):
+            disabled = "SKILL.md.disabled" in files
+            if "SKILL.md" not in files and not disabled:
+                continue
+            fname = "SKILL.md.disabled" if disabled else "SKILL.md"
+            md = os.path.join(dirpath, fname)
+            fm = parse_skill_frontmatter(md)
+            name = str(fm.get("name") or os.path.basename(dirpath))
+            if name in by_name:
+                continue
+            rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
+            rel_id = rel.replace("/", "-")
+            perms = perms_from_skill_frontmatter(rel_id, name, fm)
+            desc = str(fm.get("description", "")) or "本机技能"
+            if root_label:
+                desc = f"{desc}（来源：{root_label}）"
+            by_name[name] = Asset(
+                id=f"{agent_id}-skill-{_skill_name_slug(name)}",
+                agent_id=agent_id,
+                type=AT.SKILL.value,
+                name=name,
+                version=str(fm.get("version", "")) or None,
+                status=ST.DISABLED.value if disabled else ST.ENABLED.value,
+                purpose=desc,
+                source=source,
+                permissions=perms,
+                path=md,
+                can_disable=True,
+                can_uninstall=False,
+            )
+
+    return sorted(by_name.values(), key=lambda a: a.name.lower())
+
+
+def openclaw_workspace_dir(home: str, cfg: dict) -> Optional[str]:
+    """解析 OpenClaw 活动 workspace 路径。"""
+    agents = cfg.get("agents") or {}
+    defaults = agents.get("defaults") or {}
+    ws = defaults.get("workspace")
+    if ws:
+        path = os.path.expanduser(str(ws))
+        if os.path.isdir(path):
+            return path
+    fallback = os.path.join(home, "workspace")
+    return fallback if os.path.isdir(fallback) else None
+
+
+def resolve_openclaw_cli() -> Optional[str]:
+    """定位 openclaw CLI（GUI 子进程 PATH 常不含 npm global bin）。"""
+    found = shutil.which("openclaw")
+    if found:
+        return found
+    home = os.path.expanduser("~")
+    for cand in (
+        os.path.join(home, ".npm-global", "bin", "openclaw"),
+        os.path.join(home, ".local", "bin", "openclaw"),
+        "/opt/homebrew/bin/openclaw",
+        "/usr/local/bin/openclaw",
+    ):
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    return None
+
+
+def resolve_openclaw_bundled_skills_dir() -> Optional[str]:
+    """定位 openclaw npm 包自带的 bundled skills/ 目录。"""
+    candidates: List[str] = []
+    cli = resolve_openclaw_cli()
+    if cli:
+        real = os.path.realpath(cli)
+        base = os.path.basename(real).lower()
+        if base.startswith("openclaw"):
+            candidates.append(os.path.join(os.path.dirname(real), "skills"))
+        prefix = os.path.dirname(os.path.dirname(real))
+        candidates.append(os.path.join(prefix, "lib", "node_modules", "openclaw", "skills"))
+        candidates.append(
+            os.path.join(os.path.dirname(real), "..", "node_modules", "openclaw", "skills")
+        )
+    home = os.path.expanduser("~")
+    candidates.extend(
+        [
+            os.path.join(home, ".npm-global", "lib", "node_modules", "openclaw", "skills"),
+            os.path.join(home, ".local", "lib", "node_modules", "openclaw", "skills"),
+        ]
+    )
+    seen: set[str] = set()
+    for cand in candidates:
+        try:
+            path = os.path.realpath(cand)
+        except OSError:
+            continue
+        if path in seen:
+            continue
+        seen.add(path)
+        if os.path.isdir(path):
+            return path
+    return None
+
+
+def resolve_openclaw_package_dir() -> Optional[str]:
+    """定位 openclaw npm 包根目录（含 package.json / node_modules）。"""
+    skills = resolve_openclaw_bundled_skills_dir()
+    if skills:
+        return os.path.dirname(skills)
+    home = os.path.expanduser("~")
+    for cand in (
+        os.path.join(home, ".npm-global", "lib", "node_modules", "openclaw"),
+        os.path.join(home, ".local", "lib", "node_modules", "openclaw"),
+    ):
+        if os.path.isdir(cand):
+            return os.path.realpath(cand)
+    return None
+
+
+def _format_agent_version(ver: Optional[str]) -> str:
+    if not ver:
+        return ""
+    s = str(ver).strip().lstrip("vV")
+    m = re.search(r"[0-9][\w.\-]*", s)
+    return f"v{m.group(0)}" if m else ""
+
+
+def resolve_openclaw_installed_version(config_version: Optional[str] = None) -> str:
+    """OpenClaw 已安装版本：config → npm package.json → CLI --version。"""
+    if config_version:
+        formatted = _format_agent_version(str(config_version))
+        if formatted:
+            return formatted
+    pkg_root = resolve_openclaw_package_dir()
+    if pkg_root:
+        pkg = read_json(os.path.join(pkg_root, "package.json")) or {}
+        formatted = _format_agent_version(pkg.get("version"))
+        if formatted:
+            return formatted
+    cli = resolve_openclaw_cli()
+    if cli:
+        try:
+            proc = subprocess.run(
+                [cli, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            proc = None
+        if proc and proc.returncode == 0:
+            text = (proc.stdout or proc.stderr or "").strip()
+            match = re.search(r"OpenClaw\s+([\d.]+(?:[.\-]\w+)*)", text, re.I)
+            if match:
+                return _format_agent_version(match.group(1))
+    return ""
+
+
+def openclaw_plugin_npm_roots(home: str) -> List[str]:
+    """~/.openclaw/npm/projects/* 下各插件 npm 沙箱。"""
+    roots: List[str] = []
+    projects = os.path.join(home, "npm", "projects")
+    if not os.path.isdir(projects):
+        return roots
+    for name in sorted(os.listdir(projects)):
+        root = os.path.join(projects, name)
+        if os.path.isfile(os.path.join(root, "package.json")):
+            roots.append(os.path.realpath(root))
+    return roots
+
+
+def discover_openclaw_dependencies(home: str, agent_id: str = "openclaw") -> List[Asset]:
+    """OpenClaw npm 主包 + 插件沙箱 + 可选 PyPI 清单。"""
+    by_key: Dict[Tuple[str, str, str], Asset] = {}
+
+    def ingest(deps: List[Asset], install_root: Optional[str], label: str) -> None:
+        for d in deps:
+            key = (d.name, d.version or "", d.ecosystem or "")
+            if key in by_key:
+                continue
+            if label == "plugin":
+                d.purpose = "插件 npm 依赖组件"
+            elif label == "openclaw":
+                d.purpose = "npm 依赖组件"
+            if d.ecosystem == "npm" and install_root:
+                d.manager = "npm"
+                d.install_path = install_root
+                d.package_name = d.name
+                d.can_update = True
+                d.can_uninstall = True
+            elif d.ecosystem == "PyPI" and install_root:
+                d.manager = "pip"
+                d.install_path = install_root
+                d.package_name = d.name
+                d.can_update = True
+                d.can_uninstall = True
+            d.can_disable = False
+            by_key[key] = d
+
+    pkg_root = resolve_openclaw_package_dir()
+    if pkg_root:
+        ingest(deps_from_npm_workspace(pkg_root, agent_id), pkg_root, "openclaw")
+
+    for plugin_root in openclaw_plugin_npm_roots(home):
+        ingest(deps_from_npm_workspace(plugin_root, agent_id), plugin_root, "plugin")
+
+    req_path = os.path.join(home, "requirements.txt")
+    ingest(deps_from_requirements(req_path, agent_id), home, "local")
+
+    py_path = os.path.join(home, "pyproject.toml")
+    if os.path.isfile(py_path):
+        ingest(deps_from_pyproject(py_path, agent_id), home, "local")
+
+    return sorted(by_key.values(), key=lambda a: (a.ecosystem or "", a.name.lower()))
+
+
+def openclaw_skill_roots(home: str, cfg: dict) -> List[Tuple[str, str]]:
+    """OpenClaw skill 发现根目录（顺序与官方 precedence 一致，高→低）。"""
+    roots: List[Tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def add(path: Optional[str], label: str) -> None:
+        if not path:
+            return
+        real = os.path.realpath(os.path.expanduser(path))
+        if real in seen or not os.path.isdir(real):
+            return
+        seen.add(real)
+        roots.append((real, label))
+
+    ws = openclaw_workspace_dir(home, cfg)
+    if ws:
+        add(os.path.join(ws, "skills"), "workspace")
+        add(os.path.join(ws, ".agents", "skills"), "project-agent")
+
+    add(os.path.join(os.path.expanduser("~"), ".agents", "skills"), "personal-agent")
+    add(os.path.join(home, "skills"), "managed")
+
+    skills_cfg = cfg.get("skills") or {}
+    load_cfg = skills_cfg.get("load") or {}
+    for extra in load_cfg.get("extraDirs") or []:
+        add(str(extra), "extra")
+
+    add(resolve_openclaw_bundled_skills_dir(), "bundled")
+    add(os.path.join(home, "plugin-skills"), "plugin")
+
+    return roots
 
 
 _VER_RE = re.compile(r"[0-9][\w.\-]*")
@@ -407,6 +668,37 @@ def parse_mcp_npm_package(srv: dict) -> Optional[str]:
     return None
 
 
+def _looks_secret_env_key(key: str) -> bool:
+    k = key.lower()
+    return any(t in k for t in ("key", "token", "secret", "password", "api"))
+
+
+def describe_mcp_purpose(server_name: str, srv: dict) -> str:
+    """生成可读的 MCP 用途描述（结构化 token，供 UI 本地化）。
+
+    格式：__mcp__|label:<name>|npm:<pkg>|script:<basename>|creds:<k1,k2>
+    避免把完整命令行路径塞进 purpose。
+    """
+    parts = [f"label:{server_name.strip() or 'mcp'}"]
+    npm_pkg = parse_mcp_npm_package(srv)
+    if npm_pkg:
+        parts.append(f"npm:{npm_pkg}")
+    else:
+        for arg in srv.get("args") or []:
+            a = str(arg)
+            if a.endswith((".mjs", ".js", ".py", ".ts", ".cjs")):
+                parts.append(f"script:{os.path.basename(a)}")
+                break
+        else:
+            cmd = str(srv.get("command", "")).strip()
+            if cmd:
+                parts.append(f"cmd:{cmd}")
+    env_keys = [k for k in (srv.get("env") or {}).keys() if _looks_secret_env_key(k)]
+    if env_keys:
+        parts.append(f"creds:{','.join(env_keys)}")
+    return "__mcp__|" + "|".join(parts)
+
+
 def mcp_local_version(script_path: str) -> Optional[str]:
     """本地 MCP 脚本旁 package.json 版本。"""
     if not script_path:
@@ -428,4 +720,116 @@ def installed_npm_version(package: str, search_root: str) -> Optional[str]:
     if data and data.get("version"):
         return str(data["version"])
     return None
+
+
+_PLATFORM_LABELS = {
+    "webchat": "WebChat",
+    "slack": "Slack",
+    "discord": "Discord",
+    "telegram": "Telegram",
+    "whatsapp": "WhatsApp",
+    "feishu": "飞书",
+    "lark": "Lark",
+    "wechat": "微信",
+    "signal": "Signal",
+    "imessage": "iMessage",
+    "googlechat": "Google Chat",
+    "msteams": "Microsoft Teams",
+    "mattermost": "Mattermost",
+    "matrix": "Matrix",
+}
+
+
+def _channel_label(key: str) -> str:
+    k = str(key).lower()
+    return _PLATFORM_LABELS.get(k, str(key).replace("_", " ").title())
+
+
+def _channel_cred_keys(ch: dict) -> List[str]:
+    """仅记录凭证字段名，绝不读取或存储值。"""
+    out: List[str] = []
+    for k, v in ch.items():
+        if v in (None, "", [], {}):
+            continue
+        lk = str(k).lower()
+        if any(t in lk for t in ("token", "secret", "key", "password", "credential")):
+            out.append(str(k))
+    return out
+
+
+def _channel_purpose(label: str, ch: dict) -> str:
+    parts: List[str] = []
+    if ch.get("dmPolicy"):
+        parts.append(f"DM 策略 {ch['dmPolicy']}")
+    if ch.get("mode"):
+        parts.append(f"模式 {ch['mode']}")
+    creds = _channel_cred_keys(ch)
+    if creds:
+        parts.append(f"凭证引用：{', '.join(creds)}")
+    suffix = f"（{'; '.join(parts)}）" if parts else ""
+    return f"{label} IM 通道{suffix}"
+
+
+def _channel_version_hint(ch: dict) -> Optional[str]:
+    for key in ("mode", "dmPolicy"):
+        val = ch.get(key)
+        if val not in (None, ""):
+            return str(val)
+    return None
+
+
+def discover_channels(
+    agent_id: str,
+    source: str,
+    cfg: dict,
+    cfg_path: str,
+    *,
+    roots: Tuple[str, ...] = ("channels",),
+) -> List[Asset]:
+    """从 Agent 主配置发现对外 IM 通道（OpenClaw channels.* / Hermes platforms.*）。"""
+    out: List[Asset] = []
+    seen: set[str] = set()
+
+    for root in roots:
+        section = cfg.get(root)
+        if not isinstance(section, dict):
+            continue
+        for key, ch in section.items():
+            if not isinstance(ch, dict) or not ch:
+                continue
+            safe_suffix = re.sub(r"[^\w-]", "-", str(key))
+            cid = f"{agent_id}-channel-{root}-{safe_suffix}"
+            if cid in seen:
+                continue
+            seen.add(cid)
+            label = _channel_label(str(key))
+            enabled = ch.get("enabled", True) is not False
+            out.append(
+                Asset(
+                    id=cid,
+                    agent_id=agent_id,
+                    type=AssetType.CHANNEL.value,
+                    name=label,
+                    version=_channel_version_hint(ch),
+                    status=AssetStatus.DISABLED.value if not enabled else AssetStatus.ENABLED.value,
+                    purpose=_channel_purpose(label, ch),
+                    source=source,
+                    permissions=[
+                        perm(
+                            f"ch-{agent_id}-{safe_suffix}",
+                            "network",
+                            FindingSource.AGENT_CONFIG,
+                            label,
+                            Severity.MEDIUM,
+                        )
+                    ],
+                    path=cfg_path,
+                    config_key=f"{root}:{key}",
+                    can_disable=True,
+                    can_uninstall=False,
+                    can_update=False,
+                )
+            )
+
+    return out
 

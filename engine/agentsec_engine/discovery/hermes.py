@@ -38,7 +38,6 @@ class HermesAdapter(AgentAdapter):
         return Agent(
             id="hermes", name="Hermes Agent", kind="hermes",
             version=self._version(home),
-            latest_version=self._latest_version(home),
             listen_ports=parsers.collect_listen_ports(cfg, home),
             enabled=True,
             description=self._description(cfg),
@@ -50,22 +49,6 @@ class HermesAdapter(AgentAdapter):
         if data and data.get("ver"):
             return "v" + str(data["ver"])
         return ""
-
-    def _latest_version(self, home: str) -> Optional[str]:
-        from ..enrichment import _with_v, normalize_version
-        from ..registry_client import fetch_pypi_latest
-
-        data = parsers.read_json(os.path.join(home, ".update_check"))
-        if not data:
-            return None
-        ver = data.get("ver")
-        behind = data.get("behind", 0)
-        if behind == 0 and ver:
-            return _with_v(str(ver))
-        latest = fetch_pypi_latest("hermes-agent")
-        if latest:
-            return _with_v(latest)
-        return _with_v(str(ver)) if ver else None
 
     def _description(self, cfg: dict) -> str:
         model = (cfg.get("model") or {}).get("default", "")
@@ -91,6 +74,9 @@ class HermesAdapter(AgentAdapter):
             + self._skills(home)
             + self._knowledge(home, cfg)
             + self._deps(home)
+            + parsers.discover_channels(
+                "hermes", "Hermes", cfg, os.path.join(home, "config.yaml"), roots=("platforms",)
+            )
         )
 
     def _knowledge(self, home: str, cfg: dict) -> List[Asset]:
@@ -155,13 +141,8 @@ class HermesAdapter(AgentAdapter):
         for name, srv in (cfg.get("mcp_servers") or {}).items():
             if not isinstance(srv, dict):
                 continue
-            cmd = " ".join([str(srv.get("command", ""))] + [str(a) for a in srv.get("args", [])]).strip()
             perms = parsers.perms_from_mcp_server(name, srv)
-            # 凭证：仅记录键名引用，绝不存值（NF-S2）
-            env_keys = [k for k in (srv.get("env") or {}).keys() if _looks_secret(k)]
-            purpose = f"MCP 服务：{cmd}" if cmd else "MCP 服务"
-            if env_keys:
-                purpose += f"（凭证引用：{', '.join(env_keys)}）"
+            purpose = parsers.describe_mcp_purpose(name, srv)
             disabled = srv.get("enabled") is False
             npm_pkg = parsers.parse_mcp_npm_package(srv)
             version = str(srv.get("version", "")) or None

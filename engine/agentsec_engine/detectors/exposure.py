@@ -6,10 +6,12 @@
 
 MVP 规则子集（见 docs/engine/atr-mvp-rules.md）：
   默认启用 stable + experimental 中 severity∈{critical,high,medium}、可静态扫描目标
-  （mcp/skill/both）的规则，约 276 条（排除 2 条高误报）；experimental 的 critical/high
+  （mcp/skill/both）的规则，约 266 条（排除 12 条高误报）；experimental 的 critical/high
   另要求 confidence∈{high, medium-high}，medium 严重度 experimental 全量纳入。
 
-pyatr 需 Python ≥ 3.10；导入失败时（如 3.8）自动降级，由上层回落到 fixture。
+排除列表见 `data/atr_rules/excluded_rules.yaml`（基于本机扫描误报分析）。
+
+pyatr 需 Python ≥ 3.10；导入失败时自动降级，由上层回落到 fixture。
 """
 
 from __future__ import annotations
@@ -19,7 +21,10 @@ import os
 import re
 import shutil
 import subprocess
-from typing import Callable, Dict, List, Optional, Tuple
+from pathlib import Path
+from typing import Callable, Dict, FrozenSet, List, Optional, Tuple
+
+import yaml
 
 from ..models import Agent, ExposureFinding, FindingSource, Severity
 from ..threat_whitelist import is_whitelisted_path
@@ -38,13 +43,28 @@ _SEV_INCLUDED = frozenset({"critical", "high", "medium"})
 # experimental 规则额外要求较高置信度，控制误报
 _CONF_INCLUDED = frozenset({"high", "medium-high"})
 
-# MVP 排除：对 SKILL.md 静态扫描误报率过高的宽泛规则（见 docs/engine/atr-mvp-rules.md）
-# ATR-2026-00001 — Indirect Prompt Injection via External Content：正常 skill 文档常描述外部输入
-# ATR-2026-00030 — Cross-Agent Attack Detection：多 agent 协作文档触发面过宽
-_EXCLUDED_RULE_IDS = frozenset({
-    "ATR-2026-00001",
-    "ATR-2026-00030",
-})
+# MVP 排除：对 SKILL.md 静态扫描误报率过高的宽泛规则（见 data/atr_rules/excluded_rules.yaml）
+_EXCLUDED_RULES_PATH = (
+    Path(__file__).resolve().parent.parent / "data" / "atr_rules" / "excluded_rules.yaml"
+)
+
+
+def _load_excluded_rule_ids() -> FrozenSet[str]:
+    """从 excluded_rules.yaml 加载排除列表；文件缺失时退回最小集。"""
+    fallback = frozenset({"ATR-2026-00001", "ATR-2026-00030"})
+    try:
+        with open(_EXCLUDED_RULES_PATH, encoding="utf-8") as f:
+            data = yaml.safe_load(f) or {}
+    except (OSError, yaml.YAMLError):
+        return fallback
+    rules = data.get("rules")
+    if not isinstance(rules, list):
+        return fallback
+    ids = {r["id"] for r in rules if isinstance(r, dict) and r.get("id")}
+    return frozenset(ids) if ids else fallback
+
+
+_EXCLUDED_RULE_IDS = _load_excluded_rule_ids()
 
 # 单文件喂给 ATR 的最大字符数（性能护栏；注入特征通常靠前）
 _MAX_SCAN_CHARS = 65536
@@ -186,7 +206,7 @@ class ATREngine:
             ):
                 self._subset_ids.add(r.id)
         self._subset_ids -= _EXCLUDED_RULE_IDS
-        # 性能：原地裁剪规则列表，evaluate 只跑子集（459 → ~276，详见 atr-mvp-rules.md）。
+        # 性能：原地裁剪规则列表，evaluate 只跑子集（459 → ~266，详见 atr-mvp-rules.md）。
         try:
             self._engine._rules[:] = [
                 r for r in self._engine._rules if r.id in self._subset_ids

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { spawn, ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -89,12 +90,23 @@ function restartEngine() {
   startEngine();
 }
 
+function enginePathEnv(): string {
+  const home = os.homedir();
+  const extra = [
+    path.join(home, ".npm-global", "bin"),
+    path.join(home, ".local", "bin"),
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+  ];
+  return [...extra, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter);
+}
+
 function startEngine() {
   const { cmd, args, cwd } = resolveEngine();
   log("start engine:", cmd, args.join(" "), "cwd=", cwd);
   engine = spawn(cmd, args, {
     cwd,
-    env: { ...process.env, PYTHONUNBUFFERED: "1" },
+    env: { ...process.env, PYTHONUNBUFFERED: "1", PATH: enginePathEnv() },
   });
 
   engine.stdout.setEncoding("utf-8");

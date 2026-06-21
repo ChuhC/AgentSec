@@ -1,0 +1,31 @@
+# agentSec MVP：静态扫描排除的 ATR 规则
+# 用于 SKILL.md / MCP / agent_config 的 regex 扫描；误报主要来自官方 skill 文档中的
+# CLI 示例、安全说明、否定句与调试地址，而非真实攻击载荷。
+# 详见 docs/engine/atr-mvp-rules.md §2.1
+
+version: 1
+rules:
+  - id: ATR-2026-00001
+    reason: 正常 skill 常描述外部输入/引用
+  - id: ATR-2026-00002
+    reason: 与 00001 同类，外部内容间接注入描述在文档中极常见
+  - id: ATR-2026-00004
+    reason: 文档中出现 system prompt 等术语即命中，非运行时覆写
+  - id: ATR-2026-00030
+    reason: 多 agent 协作文档触发面过宽
+  - id: ATR-2026-00110
+    reason: 安全/code-review skill 中教如何用 grep 检测 eval，非执行 eval
+  - id: ATR-2026-00111
+    reason: 大量 skill 的 bash/CLI 示例（反引号、管道）被当作 shell 注入
+  - id: ATR-2026-00118
+    reason: 英文常用语 normal、配置项 subagent_auto_approve 等误命中
+  - id: ATR-2026-00223
+    reason: localhost:9229 等调试 curl 示例，规则名指向 WhatsApp 反向 shell
+  - id: ATR-2026-00225
+    reason: 0.0.0.0 等绑定地址出现在 UDP/网络错误说明中
+  - id: ATR-2026-00398
+    reason: 与 00110 同类，grep eval 检测示例误报
+  - id: ATR-2026-00424
+    reason: 「Do not expose internal prompt」等否定句安全规范被当作外泄指令
+  - id: ATR-2026-00510
+    reason: CLI 帮助中的 run ID、cron run 等子串误命中延迟执行

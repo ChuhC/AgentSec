@@ -17,6 +17,7 @@ import threading
 from datetime import datetime
 from typing import Optional
 
+from .agent_manager import AgentManager
 from .asset_manager import AssetManager, AssetOperationError
 from .discovery.registry import discover_agent
 from .orchestrator import ScanOrchestrator
@@ -51,6 +52,7 @@ class IPCServer:
     def __init__(self):
         self.store = SnapshotStore()
         self.asset_manager = AssetManager(self.store)
+        self.agent_manager = AgentManager(self.store)
         self._orchestrator: Optional[ScanOrchestrator] = None
         self._scan_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
@@ -100,6 +102,8 @@ class IPCServer:
                 self._reply(req_id, {"snapshot": self.asset_manager.uninstall(params["assetId"])})
             elif method == "agent.refresh":
                 self._reply(req_id, self._agent_refresh(params))
+            elif method == "agent.update":
+                self._reply(req_id, self._agent_update(params))
             elif method == "agent.runtime.get":
                 self._reply(req_id, self._agent_runtime_get(params))
             elif method == "threat.ignore":
@@ -157,7 +161,13 @@ class IPCServer:
             raise ValueError("缺少 agentId")
         scope_path = params.get("scopePath")
         cve_online = params.get("cveOnline", True)
-        agent, assets, status = discover_agent(agent_id, scope_path=scope_path, online=cve_online)
+        force_update_check = params.get("forceUpdateCheck", True)
+        agent, assets, status = discover_agent(
+            agent_id,
+            scope_path=scope_path,
+            online=cve_online,
+            force_update_check=force_update_check,
+        )
         if status != "ok" or agent is None:
             raise ValueError("无法刷新 Agent：" + str(status))
 
@@ -181,6 +191,14 @@ class IPCServer:
         if snap is None:
             raise ValueError("无可用快照，请先完成一次全机扫描")
         return {"snapshot": snap, "status": status}
+
+    def _agent_update(self, params: dict) -> dict:
+        agent_id = params.get("agentId") or params.get("agent_id")
+        if not agent_id:
+            raise ValueError("缺少 agentId")
+        scope_path = params.get("scopePath")
+        snap = self.agent_manager.update(agent_id, scope_path=scope_path)
+        return {"snapshot": snap}
 
     def _agent_runtime_get(self, params: dict) -> dict:
         agent_id = params.get("agentId") or params.get("agent_id")

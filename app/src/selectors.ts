@@ -31,7 +31,21 @@ function threatLocationPath(loc: string): string {
   return raw.split(":")[0];
 }
 
-export { threatLocationPath };
+function threatLocationLine(loc: string): number | undefined {
+  const raw = loc.trim();
+  if (raw.startsWith("/") || raw.startsWith("~")) {
+    const m = raw.match(/:(\d+)$/);
+    return m ? Number(m[1]) : undefined;
+  }
+  const parts = raw.split(":");
+  if (parts.length >= 2) {
+    const n = Number(parts[parts.length - 1]);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+export { threatLocationPath, threatLocationLine };
 
 export function isWhitelistedThreatPath(path: string): boolean {
   const norm = threatLocationPath(path).replace(/\\/g, "/");
@@ -97,6 +111,7 @@ export function assetCounts(s: ScanSnapshot) {
     mcp: s.assets.filter((a) => a.type === "mcp").length,
     skills: s.assets.filter((a) => a.type === "skill").length,
     knowledge: s.assets.filter((a) => a.type === "knowledge").length,
+    channels: s.assets.filter((a) => a.type === "channel").length,
     updatable: s.assets.filter((a) => a.status === "updatable").length,
     dependencies: s.assets.filter((a) => a.type === "dependency").length,
   };
@@ -167,6 +182,8 @@ export function vulnerableComponentRows(s: ScanSnapshot): VulnComponentRow[] {
           hit.cvss = c.cvss;
           hit.severity = c.severity;
           hit.summary = c.summary;
+          if (c.advisory_id) hit.advisory_id = c.advisory_id;
+          if (c.reference_url) hit.reference_url = c.reference_url;
         }
       }
       row.cves.sort((a, b) => b.cvss - a.cvss);

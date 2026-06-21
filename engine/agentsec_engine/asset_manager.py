@@ -148,6 +148,87 @@ def _toggle_mcp_config(config_path: str, server_key: str, enable: bool) -> None:
         raise AssetOperationError(f"写入配置失败：{exc}")
 
 
+def _toggle_channel_json(config_path: str, config_key: str, enable: bool) -> None:
+    """原子修改 JSON 配置中的 channels.* / platforms.*.enabled。"""
+    import json
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except OSError as exc:
+        raise AssetOperationError(f"读取配置失败：{exc}")
+    except ValueError as exc:
+        raise AssetOperationError(f"解析配置失败：{exc}")
+
+    if ":" not in config_key:
+        raise AssetOperationError(f"不支持的通道配置键：{config_key}")
+    root, name = config_key.split(":", 1)
+    if root not in ("channels", "platforms"):
+        raise AssetOperationError(f"不支持的通道配置键：{config_key}")
+    section = (data or {}).get(root) or {}
+    if name not in section or not isinstance(section[name], dict):
+        raise AssetOperationError(f"配置中未找到通道 {name}")
+    section[name]["enabled"] = bool(enable)
+
+    tmp = config_path + ".agentsec.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp, config_path)
+    except OSError as exc:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise AssetOperationError(f"写入配置失败：{exc}")
+
+
+def _toggle_channel_yaml(config_path: str, config_key: str, enable: bool) -> None:
+    """ruamel 往返修改 YAML 配置中的 channels.* / platforms.*.enabled。"""
+    try:
+        from ruamel.yaml import YAML
+    except ImportError:
+        raise AssetOperationError("缺少 ruamel.yaml，无法安全修改配置")
+    yaml = YAML()
+    yaml.preserve_quotes = True
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = yaml.load(f)
+    except OSError as exc:
+        raise AssetOperationError(f"读取配置失败：{exc}")
+
+    data = data or {}
+    if ":" not in config_key:
+        raise AssetOperationError(f"不支持的通道配置键：{config_key}")
+    root, name = config_key.split(":", 1)
+    if root not in ("channels", "platforms"):
+        raise AssetOperationError(f"不支持的通道配置键：{config_key}")
+    section = data.get(root) or {}
+    if name not in section:
+        raise AssetOperationError(f"配置中未找到通道 {name}")
+    section[name]["enabled"] = bool(enable)
+
+    tmp = config_path + ".agentsec.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            yaml.dump(data, f)
+        os.replace(tmp, config_path)
+    except OSError as exc:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise AssetOperationError(f"写入配置失败：{exc}")
+
+
+def _toggle_channel_config(config_path: str, config_key: str, enable: bool) -> None:
+    if config_path.endswith(".json"):
+        _toggle_channel_json(config_path, config_key, enable)
+    else:
+        _toggle_channel_yaml(config_path, config_key, enable)
+
+
 class AssetManager:
     def __init__(self, store: SnapshotStore):
         self.store = store
@@ -212,6 +293,7 @@ class AssetManager:
 
         - skill：重命名 SKILL.md ↔ SKILL.md.disabled（可逆，不碰主配置）
         - mcp  ：ruamel 往返写 config.yaml 的 enabled 标志（保留注释/格式）
+        - channel：写 config 中 channels.* / platforms.*.enabled
         无真实句柄（path/config_key）→ 仅快照模拟。
         """
         atype = asset.get("type")
@@ -220,6 +302,9 @@ class AssetManager:
             return _toggle_skill_file(path, enable)
         if atype == "mcp" and path and asset.get("config_key"):
             _toggle_mcp_config(path, asset["config_key"], enable)
+            return None
+        if atype == "channel" and path and asset.get("config_key"):
+            _toggle_channel_config(path, asset["config_key"], enable)
             return None
         return None
 

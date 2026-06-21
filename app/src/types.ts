@@ -1,7 +1,7 @@
 // 与 Python 引擎 models.py 对齐的前端类型。
 
 export type Severity = "high" | "medium" | "low" | "safe" | "info";
-export type AssetTypeT = "mcp" | "skill" | "knowledge" | "dependency";
+export type AssetTypeT = "mcp" | "skill" | "knowledge" | "dependency" | "channel";
 export type AssetStatusT = "enabled" | "disabled" | "updatable";
 
 export interface PermissionEntry {
@@ -45,6 +45,11 @@ export interface Agent {
   enabled: boolean;
   description: string;
   permissions: PermissionEntry[];
+  update_available?: boolean;
+  can_update?: boolean;
+  update_method?: string | null;
+  update_command?: string | null;
+  update_detail?: string | null;
 }
 
 export interface AgentRuntime {
@@ -78,6 +83,8 @@ export interface ExposureFinding {
 
 export interface CVEItem {
   cve_id: string;
+  advisory_id?: string;
+  reference_url?: string;
   severity: Severity;
   cvss: number;
   summary: string;
