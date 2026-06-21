@@ -34,11 +34,12 @@ import {
 const SEV_W: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0, safe: 0 };
 const RADAR_CATS = ["文件", "Shell", "网络", "工具", "知识库"];
 const MAIN_TABS = ["概览", "资产管理", "威胁管理", "漏洞管理"] as const;
-const ASSET_SUB_TABS = ["MCP", "Skills", "知识库", "依赖"] as const;
+const ASSET_SUB_TABS = ["MCP", "Skills", "知识库", "通道", "依赖"] as const;
 const ASSET_TAB_TYPE: Record<(typeof ASSET_SUB_TABS)[number], string> = {
   MCP: "mcp",
   Skills: "skill",
   知识库: "knowledge",
+  通道: "channel",
   依赖: "dependency",
 };
 
@@ -59,6 +60,7 @@ function assetSubTabLabel(tab: (typeof ASSET_SUB_TABS)[number], t: TFn): string 
     MCP: "assetMcp",
     Skills: "assetSkills",
     知识库: "assetKnowledge",
+    通道: "assetChannel",
     依赖: "assetDeps",
   };
   return t(`agentWorkbench.${map[tab]}`);
@@ -92,7 +94,7 @@ export function AgentWorkbench({
   initialTab?: string;
   focusSource?: string;
 }) {
-  const { snapshot, navigate, refreshAgentAssets, t } = useApp();
+  const { snapshot, navigate, refreshAgentAssets, updateAgent, settings, t } = useApp();
   const init = resolveInitialTab(initialTab);
   const [tab, setTab] = useState<(typeof MAIN_TABS)[number]>(init.main);
   const [assetSubTab, setAssetSubTab] = useState<(typeof ASSET_SUB_TABS)[number]>(() => {
@@ -103,6 +105,9 @@ export function AgentWorkbench({
   });
   const [refreshing, setRefreshing] = useState(false);
   const [threatFindingId, setThreatFindingId] = useState<string | undefined>();
+  const [confirmAgentUpdate, setConfirmAgentUpdate] = useState<Agent | null>(null);
+  const [manualUpdateAgent, setManualUpdateAgent] = useState<Agent | null>(null);
+  const [updatingAgent, setUpdatingAgent] = useState(false);
 
   const agent = snapshot?.agents.find((a) => a.id === agentId);
   if (!snapshot || !agent) {
@@ -197,12 +202,56 @@ export function AgentWorkbench({
           onCheckUpdate={async () => {
             setRefreshing(true);
             try {
-              await refreshAgentAssets(agentId);
+              const snap = await refreshAgentAssets(agentId);
+              const fresh = snap?.agents.find((a) => a.id === agentId);
+              if (!fresh?.update_available) return;
+              if (fresh.can_update) {
+                if (settings.confirmUpdate) setConfirmAgentUpdate(fresh);
+                else {
+                  setUpdatingAgent(true);
+                  try {
+                    await updateAgent(agentId);
+                  } finally {
+                    setUpdatingAgent(false);
+                  }
+                }
+              } else {
+                setManualUpdateAgent(fresh);
+              }
             } finally {
               setRefreshing(false);
             }
           }}
-          updating={refreshing}
+          updating={refreshing || updatingAgent}
+        />
+      )}
+      {confirmAgentUpdate && (
+        <ConfirmModal
+          title={t("agentWorkbench.confirmAgentUpdateTitle")}
+          message={t("agentWorkbench.confirmAgentUpdateMsg", {
+            command: confirmAgentUpdate.update_command || "update",
+          })}
+          confirmLabel={t("agentWorkbench.checkUpdate")}
+          onConfirm={async () => {
+            const id = confirmAgentUpdate.id;
+            setConfirmAgentUpdate(null);
+            setUpdatingAgent(true);
+            try {
+              await updateAgent(id);
+            } finally {
+              setUpdatingAgent(false);
+            }
+          }}
+          onCancel={() => setConfirmAgentUpdate(null)}
+        />
+      )}
+      {manualUpdateAgent && (
+        <ConfirmModal
+          title={t("agentWorkbench.manualUpdateTitle")}
+          message={`${t("agentWorkbench.manualUpdateMsg")}\n${manualUpdateAgent.update_command || ""}`}
+          confirmLabel={t("common.action.close")}
+          onConfirm={() => setManualUpdateAgent(null)}
+          onCancel={() => setManualUpdateAgent(null)}
         />
       )}
       {tab === "资产管理" && (
@@ -261,14 +310,21 @@ function Overview({
   const mcp = assets.filter((a) => a.type === "mcp").length;
   const skills = assets.filter((a) => a.type === "skill").length;
   const knowledge = assets.filter((a) => a.type === "knowledge").length;
+  const channels = assets.filter((a) => a.type === "channel").length;
 
   const vulnComponents = cveForAgent(snapshot, agentId).length;
   const scannedDeps = assets.filter((a) => a.type === "dependency").length;
 
   const ports = agent.listen_ports?.length ? agent.listen_ports.join(", ") : "—";
-  const latestVer = agent.latest_version || agent.version || "—";
-  const versionUpToDate =
-    !agent.latest_version || agent.latest_version === agent.version;
+  const latestVer = agent.update_available
+    ? agent.latest_version || "—"
+    : agent.version || "—";
+  const versionUpToDate = !agent.update_available;
+  const updateBtnLabel = versionUpToDate
+    ? t("agentWorkbench.recheckUpdate")
+    : agent.can_update
+      ? t("agentWorkbench.checkUpdate")
+      : t("agentWorkbench.updateAvailable");
   const score = agentSecurityScore(snapshot, agentId);
   const suggestions = agentOptimizationSuggestions(snapshot, agentId);
 
@@ -300,6 +356,7 @@ function Overview({
     { value: mcp, label: "MCP", color: "var(--purple-2)" },
     { value: skills, label: "Skills", color: "var(--purple-2)" },
     { value: knowledge, label: t("agentWorkbench.assetKnowledge"), color: "var(--purple-2)" },
+    { value: channels, label: t("agentWorkbench.assetChannel"), color: "var(--purple-2)" },
   ];
 
   const cveStats = [
@@ -321,11 +378,14 @@ function Overview({
           >
             <span className="row" style={{ gap: 6 }}>
               <IconRefresh size={14} className={updating ? "spin" : undefined} />
-              {versionUpToDate ? t("agentWorkbench.versionUpToDate") : t("agentWorkbench.checkUpdate")}
+              {updating ? t("agentWorkbench.updatingAgent") : updateBtnLabel}
             </span>
           </button>
           <MetaCell label={t("agentWorkbench.currentVersion")} value={agent.version || "—"} />
           <MetaCell label={t("agentWorkbench.latestVersion")} value={latestVer} highlight={!versionUpToDate} />
+          {agent.update_detail && !versionUpToDate && (
+            <MetaCell label={t("agentWorkbench.updateDetail")} value={agent.update_detail} />
+          )}
           <MetaCell label={t("agentWorkbench.listenPorts")} value={ports} mono />
         </div>
       </div>
@@ -871,6 +931,9 @@ function AssetTab({
   }, [typeLabel, assets.length]);
 
   const isDep = typeLabel === "依赖";
+  const isChannel = typeLabel === "通道";
+  const isKnowledge = typeLabel === "知识库";
+  const isMcpOrSkill = typeLabel === "MCP" || typeLabel === "Skills";
 
   if (assets.length === 0) {
     return (
@@ -903,10 +966,22 @@ function AssetTab({
             <tr>
               <th>{t("common.table.name")}</th>
               <th style={{ width: 110 }}>{t("common.table.status")}</th>
-              <th style={{ width: 100 }}>{t("common.table.version")}</th>
-              {!isDep && <th style={{ width: 72 }}>{t("agentWorkbench.colUpdate")}</th>}
-              {!isDep && <th style={{ width: 72 }}>{t("agentWorkbench.colDisable")}</th>}
-              {!isDep && <th style={{ width: 72 }}>{t("agentWorkbench.colUninstall")}</th>}
+              {!isKnowledge && (
+                <th style={{ width: 100 }}>
+                  {isChannel ? t("agentWorkbench.colAccess") : t("common.table.version")}
+                </th>
+              )}
+              {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
+                <th style={{ width: 72 }}>{t("agentWorkbench.colUpdate")}</th>
+              )}
+              {!isDep && !isKnowledge && (
+                <th style={{ width: 72 }}>
+                  {isMcpOrSkill ? t("agentWorkbench.colActions") : t("agentWorkbench.colDisable")}
+                </th>
+              )}
+              {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
+                <th style={{ width: 72 }}>{t("agentWorkbench.colUninstall")}</th>
+              )}
               {isDep && <th style={{ width: 100 }}>{t("agentWorkbench.colVuln")}</th>}
               {!isDep && <th style={{ width: 28 }} />}
             </tr>
@@ -941,8 +1016,8 @@ function AssetTab({
                       {st.label}
                     </span>
                   </td>
-                  <td className="muted mono">{a.version || "—"}</td>
-                  {!isDep && (
+                  {!isKnowledge && <td className="muted mono">{a.version || "—"}</td>}
+                  {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
                     <td onClick={(e) => e.stopPropagation()}>
                       {a.can_update ? (
                         <span
@@ -956,7 +1031,7 @@ function AssetTab({
                       )}
                     </td>
                   )}
-                  {!isDep && (
+                  {!isDep && !isKnowledge && (
                     <td onClick={(e) => e.stopPropagation()}>
                       {a.status === "disabled" ? (
                         <span
@@ -970,14 +1045,14 @@ function AssetTab({
                           className="act-link act-disable"
                           onClick={() => doOp("disable", a.id, settings.confirmDisable)}
                         >
-                          {t("agentWorkbench.colDisable")}
+                          {t("common.action.disable")}
                         </span>
                       ) : (
                         <span className="dim">—</span>
                       )}
                     </td>
                   )}
-                  {!isDep && (
+                  {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
                     <td onClick={(e) => e.stopPropagation()}>
                       {a.can_uninstall ? (
                         <span
@@ -1197,19 +1272,39 @@ function DepDetailModal({
             <div className="cve-modal-body cve-modal-body-stack">
               <div className="cve-modal-list">
                 <div className="cve-modal-list-head">{t("vulnList.cveList")}</div>
+                <div className="cve-modal-cve-cols dim">
+                  <span>{t("vulnList.colCveId")}</span>
+                  <span>{t("common.table.riskLevel")}</span>
+                  <span>{t("vulnList.cvss")}</span>
+                  <span>{t("vulnList.colSummary")}</span>
+                  <span />
+                </div>
                 <div className="cve-modal-cve-rows">
                   {cves.map((v) => (
                     <div
-                      key={v.cve_id}
+                      key={v.cve_id + (v.advisory_id || "")}
                       className={`cve-modal-cve-row${selCve === v.cve_id ? " active" : ""}`}
                       onClick={() => toggleCve(v.cve_id)}
                     >
-                      <span className="mono" style={{ fontWeight: 600, fontSize: 13 }}>
-                        {v.cve_id}
+                      <span className="cve-modal-cve-id">
+                        <span className="mono" style={{ fontWeight: 600, fontSize: 13 }}>
+                          {v.cve_id}
+                        </span>
+                        {!v.cve_id.startsWith("CVE-") && (
+                          <span className="tag tag-muted cve-advisory-tag">{t("vulnList.advisoryLabel")}</span>
+                        )}
+                        {v.advisory_id && v.advisory_id !== v.cve_id && (
+                          <span className="dim mono cve-advisory-sub">{v.advisory_id}</span>
+                        )}
                       </span>
                       <SeverityPill sev={v.severity} />
-                      <span style={{ fontWeight: 700, fontSize: 13 }}>{v.cvss.toFixed(1)}</span>
-                      <span className="muted cve-modal-cve-summary">{layer.cveSummary(v.summary)}</span>
+                      <span style={{ fontWeight: 700, fontSize: 13 }}>{v.cvss > 0 ? v.cvss.toFixed(1) : "—"}</span>
+                      <span
+                        className="muted cve-modal-cve-summary"
+                        title={layer.cveSummary(v.summary)}
+                      >
+                        {layer.cveSummary(v.summary) || "—"}
+                      </span>
                       <IconChevron
                         size={14}
                         className="dim"
@@ -1227,23 +1322,26 @@ function DepDetailModal({
                 <div className="cve-modal-detail cve-modal-detail-stack">
                   <div className="cve-modal-list-head">{t("vulnList.vulnDetail")}</div>
                   <div className="cve-modal-detail-body">
-                    <div className="row" style={{ gap: 10, marginBottom: 12 }}>
+                    <div className="row" style={{ gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                       <span className="mono" style={{ fontSize: 16, fontWeight: 700 }}>
                         {selected.cve_id}
                       </span>
                       <SeverityPill sev={selected.severity} />
                     </div>
-                    <div className="row" style={{ gap: 24, marginBottom: 16 }}>
-                      <DetailMeta label={t("vulnList.cvss")} value={selected.cvss.toFixed(1)} />
+                    <div className="row" style={{ gap: 24, marginBottom: 16, flexWrap: "wrap" }}>
+                      <DetailMeta label={t("vulnList.cvss")} value={selected.cvss > 0 ? selected.cvss.toFixed(1) : "—"} />
                       <DetailMeta
                         label={t("vulnList.threatLevel")}
                         value={sevLabel(selected.severity)}
                       />
+                      {selected.advisory_id && selected.advisory_id !== selected.cve_id && (
+                        <DetailMeta label={t("vulnList.advisoryLabel")} value={selected.advisory_id} />
+                      )}
                     </div>
                     <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
                       {t("vulnList.summary")}
                     </div>
-                    <div className="muted" style={{ lineHeight: 1.75, fontSize: 13.5 }}>
+                    <div className="muted cve-detail-summary" style={{ lineHeight: 1.75, fontSize: 13.5 }}>
                       {selected.summary
                         ? layer.cveSummary(selected.summary)
                         : t("common.empty.noDescription")}
@@ -1259,7 +1357,7 @@ function DepDetailModal({
                   {t("agentWorkbench.fixAdvice")}
                 </div>
                 <div className="muted" style={{ lineHeight: 1.7, fontSize: 13.5 }}>
-                  {layer.upgradeAdvice(advice)}
+                  {layer.upgradeAdvice(advice, undefined)}
                 </div>
               </div>
             )}
@@ -1288,9 +1386,12 @@ function AssetDetailPanel({
       <IconBolt size={20} />
     ) : typeLabel === "知识库" ? (
       <IconBook size={20} />
+    ) : typeLabel === "通道" ? (
+      <IconGlobe size={20} />
     ) : (
       <IconDatabase size={20} />
     );
+  const isChannel = typeLabel === "通道";
 
   return (
     <>
@@ -1302,12 +1403,22 @@ function AssetDetailPanel({
 
       <div className="row" style={{ gap: 20, marginTop: 16, flexWrap: "wrap" }}>
         <DetailMeta label={t("common.table.status")} value={st.label} color={st.color} />
-        <DetailMeta label={t("common.table.version")} value={asset.version || "—"} />
+        <DetailMeta
+          label={isChannel ? t("agentWorkbench.colAccess") : t("common.table.version")}
+          value={asset.version || "—"}
+        />
         <DetailMeta label={t("common.meta.source")} value={asset.source || "—"} />
         {asset.ecosystem && <DetailMeta label={t("common.meta.ecosystem")} value={asset.ecosystem} />}
+        {isChannel && asset.config_key && (
+          <DetailMeta label={t("agentWorkbench.configKey")} value={asset.config_key} />
+        )}
       </div>
 
       {(typeLabel === "MCP" || typeLabel === "Skills" || typeLabel === "知识库") && (
+        <AssetPermissionsSection permissions={asset.permissions} t={t} />
+      )}
+
+      {isChannel && asset.permissions.length > 0 && (
         <AssetPermissionsSection permissions={asset.permissions} t={t} />
       )}
 
@@ -1319,6 +1430,17 @@ function AssetDetailPanel({
           {layer.assetPurpose(asset.purpose) || "—"}
         </div>
       </div>
+
+      {isChannel && asset.path && (
+        <div style={{ marginTop: 14 }}>
+          <div className="dim" style={{ fontSize: 12.5, marginBottom: 6 }}>
+            {t("agentWorkbench.configPath")}
+          </div>
+          <div className="muted mono" style={{ fontSize: 12, wordBreak: "break-all" }}>
+            {asset.path}
+          </div>
+        </div>
+      )}
 
       {asset.install_path && (
         <div style={{ marginTop: 14 }}>

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import os
 import re
 from typing import List, Optional
 
 from .models import Agent, Asset, AssetStatus, AssetType
 from .registry_client import fetch_npm_latest, fetch_pypi_latest
+from .update_check import apply_update_info, check_hermes_update, check_openclaw_update
 
 ST = AssetStatus
 AT = AssetType
@@ -46,42 +46,30 @@ def _with_v(ver: str) -> str:
     return f"v{s}" if s else ""
 
 
-def enrich_agent(agent: Agent, home: Optional[str] = None, online: bool = True) -> None:
-    """补齐 Agent.latest_version（基于 .update_check / registry）。"""
+def enrich_agent(
+    agent: Agent,
+    home: Optional[str] = None,
+    online: bool = True,
+    *,
+    force_update_check: bool = False,
+) -> None:
+    """补齐 Agent 版本与更新状态（官方 CLI + registry）。"""
     if agent.kind == "hermes" and home:
-        _enrich_hermes_agent(agent, home, online)
+        info = check_hermes_update(
+            home,
+            online=online,
+            force=force_update_check,
+            current_version=agent.version,
+        )
+        apply_update_info(agent, info)
     elif agent.kind == "openclaw" and home:
-        _enrich_openclaw_agent(agent, home, online)
+        if not agent.version:
+            from .discovery import parsers
+
+            agent.version = parsers.resolve_openclaw_installed_version()
+        info = check_openclaw_update(home, online=online, current_version=agent.version)
+        apply_update_info(agent, info)
     elif agent.latest_version is None and agent.version:
-        agent.latest_version = agent.version
-
-
-def _enrich_hermes_agent(agent: Agent, home: str, online: bool) -> None:
-    from .discovery import parsers
-
-    uc = parsers.read_json(os.path.join(home, ".update_check")) or {}
-    ver = uc.get("ver") or normalize_version(agent.version)
-    if ver and not agent.version:
-        agent.version = _with_v(ver)
-
-    behind = uc.get("behind", 0)
-    if behind == 0 and ver:
-        agent.latest_version = _with_v(ver)
-        return
-
-    latest = None
-    if online:
-        latest = fetch_pypi_latest("hermes-agent")
-    if latest:
-        agent.latest_version = _with_v(latest)
-    elif ver:
-        agent.latest_version = _with_v(ver)
-
-
-def _enrich_openclaw_agent(agent: Agent, home: str, online: bool) -> None:
-    if agent.latest_version:
-        return
-    if agent.version:
         agent.latest_version = agent.version
 
 
@@ -166,9 +154,15 @@ def enrich_discovery(
     online: bool = True,
     *,
     check_dep_versions: bool = False,
+    force_update_check: bool = False,
 ) -> None:
     """发现完成后统一 enrichment。"""
     homes = homes or {}
     for agent in agents:
-        enrich_agent(agent, homes.get(agent.id), online=online)
+        enrich_agent(
+            agent,
+            homes.get(agent.id),
+            online=online,
+            force_update_check=force_update_check,
+        )
     enrich_assets(assets, online=online, check_dep_versions=check_dep_versions)

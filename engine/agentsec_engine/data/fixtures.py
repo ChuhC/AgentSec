@@ -141,6 +141,22 @@ def build_assets():
         purpose="远程文档知识库", source="Hermes",
         permissions=[_perm("p-kb-dl", "下载远程内容", "知识库", SRC.KNOWLEDGE, "Docs Knowledge", S.LOW)],
     ))
+    assets.append(Asset(
+        id="hermes-channel-webchat", agent_id="hermes", type=AT.CHANNEL.value,
+        name="WebChat", version="pairing", status=ST.ENABLED.value,
+        purpose="WebChat IM 通道（DM 策略 pairing）", source="Hermes",
+        permissions=[_perm("ch-h-wc", "访问外部网络", "网络", SRC.AGENT_CONFIG, "WebChat", S.MEDIUM)],
+        path="~/.hermes/config.yaml", config_key="platforms:webchat",
+        can_disable=True, can_uninstall=False, can_update=False,
+    ))
+    assets.append(Asset(
+        id="hermes-channel-feishu", agent_id="hermes", type=AT.CHANNEL.value,
+        name="飞书", version=None, status=ST.DISABLED.value,
+        purpose="飞书 IM 通道", source="Hermes",
+        permissions=[_perm("ch-h-fs", "访问外部网络", "网络", SRC.AGENT_CONFIG, "飞书", S.MEDIUM)],
+        path="~/.hermes/config.yaml", config_key="platforms:feishu",
+        can_disable=True, can_uninstall=False, can_update=False,
+    ))
 
     # ---- OpenClaw: 2 MCP / 3 Skills ----
     assets.append(Asset(
@@ -164,6 +180,22 @@ def build_assets():
             id=sid, agent_id="openclaw", type=AT.SKILL.value, name=nm,
             version=ver, status=ST.ENABLED.value, purpose="安全研究技能", source="OpenClaw",
         ))
+    assets.append(Asset(
+        id="openclaw-channel-slack", agent_id="openclaw", type=AT.CHANNEL.value,
+        name="Slack", version="socket", status=ST.ENABLED.value,
+        purpose="Slack IM 通道（模式 socket；凭证引用：botToken, appToken）", source="OpenClaw",
+        permissions=[_perm("ch-o-slack", "访问外部网络", "网络", SRC.AGENT_CONFIG, "Slack", S.MEDIUM)],
+        path="~/.openclaw/openclaw.json", config_key="channels:slack",
+        can_disable=True, can_uninstall=False, can_update=False,
+    ))
+    assets.append(Asset(
+        id="openclaw-channel-webchat", agent_id="openclaw", type=AT.CHANNEL.value,
+        name="WebChat", version=None, status=ST.DISABLED.value,
+        purpose="WebChat IM 通道", source="OpenClaw",
+        permissions=[_perm("ch-o-wc", "访问外部网络", "网络", SRC.AGENT_CONFIG, "WebChat", S.MEDIUM)],
+        path="~/.openclaw/openclaw.json", config_key="channels:webchat",
+        can_disable=True, can_uninstall=False, can_update=False,
+    ))
 
     # ---- 依赖（供 CVE 视图，使用 OSV 可解析的真实坐标）----
     # (agent, 名称, 版本, ecosystem)

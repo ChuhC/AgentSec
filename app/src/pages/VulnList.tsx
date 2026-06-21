@@ -6,7 +6,6 @@ import type { CVEItem, Severity } from "../types";
 import {
   IconChevron,
   IconCube,
-  IconExternal,
   IconShield,
 } from "../components/Icons";
 
@@ -291,19 +290,39 @@ function ComponentModal({
         <div className="cve-modal-body cve-modal-body-stack">
           <div className="cve-modal-list">
             <div className="cve-modal-list-head">{t("vulnList.cveList")}</div>
+            <div className="cve-modal-cve-cols dim">
+              <span>{t("vulnList.colCveId")}</span>
+              <span>{t("common.table.riskLevel")}</span>
+              <span>{t("vulnList.cvss")}</span>
+              <span>{t("vulnList.colSummary")}</span>
+              <span />
+            </div>
             <div className="cve-modal-cve-rows">
               {row.cves.map((v) => (
                 <div
-                  key={v.cve_id}
+                  key={v.cve_id + (v.advisory_id || "")}
                   className={`cve-modal-cve-row${selCve === v.cve_id ? " active" : ""}`}
                   onClick={() => onToggleCve(v.cve_id)}
                 >
-                  <span className="mono" style={{ fontWeight: 600, fontSize: 13 }}>
-                    {v.cve_id}
+                  <span className="cve-modal-cve-id">
+                    <span className="mono" style={{ fontWeight: 600, fontSize: 13 }}>
+                      {v.cve_id}
+                    </span>
+                    {!v.cve_id.startsWith("CVE-") && (
+                      <span className="tag tag-muted cve-advisory-tag">{t("vulnList.advisoryLabel")}</span>
+                    )}
+                    {v.advisory_id && v.advisory_id !== v.cve_id && (
+                      <span className="dim mono cve-advisory-sub">{v.advisory_id}</span>
+                    )}
                   </span>
                   <SeverityPill sev={v.severity} />
-                  <span style={{ fontWeight: 700, fontSize: 13 }}>{v.cvss.toFixed(1)}</span>
-                  <span className="muted cve-modal-cve-summary">{layer.cveSummary(v.summary)}</span>
+                  <span style={{ fontWeight: 700, fontSize: 13 }}>{v.cvss > 0 ? v.cvss.toFixed(1) : "—"}</span>
+                  <span
+                    className="muted cve-modal-cve-summary"
+                    title={layer.cveSummary(v.summary)}
+                  >
+                    {layer.cveSummary(v.summary) || "—"}
+                  </span>
                   <IconChevron
                     size={14}
                     className="dim"
@@ -321,20 +340,23 @@ function ComponentModal({
             <div className="cve-modal-detail cve-modal-detail-stack">
               <div className="cve-modal-list-head">{t("vulnList.vulnDetail")}</div>
               <div className="cve-modal-detail-body">
-                <div className="row" style={{ gap: 10, marginBottom: 12 }}>
+                <div className="row" style={{ gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
                   <span className="mono" style={{ fontSize: 16, fontWeight: 700 }}>
                     {selected.cve_id}
                   </span>
                   <SeverityPill sev={selected.severity} />
                 </div>
-                <div className="row" style={{ gap: 24, marginBottom: 16 }}>
-                  <Meta label={t("vulnList.cvss")} value={selected.cvss.toFixed(1)} />
+                <div className="row" style={{ gap: 24, marginBottom: 16, flexWrap: "wrap" }}>
+                  <Meta label={t("vulnList.cvss")} value={selected.cvss > 0 ? selected.cvss.toFixed(1) : "—"} />
                   <Meta label={t("vulnList.threatLevel")} value={sevLabel(selected.severity)} />
+                  {selected.advisory_id && selected.advisory_id !== selected.cve_id && (
+                    <Meta label={t("vulnList.advisoryLabel")} value={selected.advisory_id} />
+                  )}
                 </div>
                 <div className="dim" style={{ fontSize: 12, marginBottom: 6 }}>
                   {t("vulnList.summary")}
                 </div>
-                <div className="muted" style={{ lineHeight: 1.75, fontSize: 13.5 }}>
+                <div className="muted cve-detail-summary" style={{ lineHeight: 1.75, fontSize: 13.5 }}>
                   {selected.summary
                     ? layer.cveSummary(selected.summary)
                     : t("common.empty.noDescription")}
@@ -350,14 +372,6 @@ function ComponentModal({
               <IconShield size={15} style={{ color: "var(--purple-2)" }} />
               {t("vulnList.upgradeAdvice")}
             </span>
-            <div className="spacer" />
-            {row.fixedVersion && (
-              <button className="btn btn-primary btn-sm" type="button">
-                <span className="row" style={{ gap: 6 }}>
-                  {t("vulnList.upgradeGuide")} <IconExternal size={13} />
-                </span>
-              </button>
-            )}
           </div>
           <div className="muted" style={{ lineHeight: 1.75, fontSize: 13 }}>
             {layer.upgradeAdvice(row.upgradeAdvice, row.fixedVersion)}

@@ -26,6 +26,7 @@ class AssetType(str, Enum):
     SKILL = "skill"
     KNOWLEDGE = "knowledge"
     DEPENDENCY = "dependency"
+    CHANNEL = "channel"
 
 
 class AssetStatus(str, Enum):
@@ -113,6 +114,11 @@ class Agent:
     description: str = ""
     latest_version: Optional[str] = None
     listen_ports: List[str] = field(default_factory=list)
+    update_available: bool = False
+    can_update: bool = False
+    update_method: Optional[str] = None  # git | pip | npm | manual
+    update_command: Optional[str] = None
+    update_detail: Optional[str] = None
     # Agent 配置级别的默认权限（权限雷达/弹窗的「Agent 配置」分组）
     permissions: List[PermissionEntry] = field(default_factory=list)
 
@@ -148,10 +154,12 @@ class ExposureFinding:
 
 @dataclass
 class CVEItem:
-    cve_id: str
+    cve_id: str  # 优先 CVE-，否则 GHSA-/OSV id
     severity: str  # Severity value
     cvss: float
     summary: str
+    advisory_id: str = ""  # OSV/GHSA 原始编号（与 cve_id 不同时展示）
+    reference_url: str = ""  # 公告/NVD 详情页
 
 
 @dataclass

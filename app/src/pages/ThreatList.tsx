@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useApp } from "../store";
 import { ConfirmModal, SeverityPill } from "../components/common";
@@ -10,6 +10,7 @@ import {
   isThreatIgnored,
   isThreatManuallyIgnored,
   isThreatPathWhitelisted,
+  threatLocationLine,
   threatLocationPath,
 } from "../selectors";
 import type { ExposureFinding, ScanSnapshot, Severity } from "../types";
@@ -70,7 +71,12 @@ export function ThreatList({
   const [query, setQuery] = useState("");
   const [modalFinding, setModalFinding] = useState<ExposureFinding | null>(null);
   const [confirmIgnore, setConfirmIgnore] = useState<ExposureFinding | null>(null);
-  const [fileView, setFileView] = useState<{ path: string; content: string; truncated: boolean } | null>(null);
+  const [fileView, setFileView] = useState<{
+    path: string;
+    content: string;
+    truncated: boolean;
+    highlightLine?: number;
+  } | null>(null);
   const [fileLoading, setFileLoading] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
@@ -109,7 +115,8 @@ export function ThreatList({
       if (catFilter !== "all" && f.category !== catFilter) return false;
       if (!agentId && agentFilter !== "all" && !f.agent_ids.includes(agentFilter)) return false;
       if (q) {
-        const hay = `${f.title} ${f.category} ${layer.threatCategory(f.category)} ${f.source} ${layer.threatSource(f.source)}`.toLowerCase();
+        const titleText = layer.threatTitle(f.id, f.title, f.category);
+        const hay = `${titleText} ${f.title} ${f.category} ${layer.threatCategory(f.category)} ${f.source} ${layer.threatSource(f.source)}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -129,12 +136,13 @@ export function ThreatList({
 
   const openFile = async (path: string) => {
     const filePath = threatLocationPath(path);
+    const highlightLine = threatLocationLine(path);
     setFileLoading(true);
     setFileError(null);
     setFileView(null);
     try {
       const res = await readFile(filePath);
-      setFileView(res);
+      setFileView({ ...res, highlightLine });
     } catch (e: any) {
       setFileError(e?.message || t("threatList.fileReadError"));
     } finally {
@@ -254,7 +262,7 @@ export function ThreatList({
                 <th style={{ width: 120 }}>{t("common.table.category")}</th>
                 <th style={{ width: 110 }}>{t("common.table.source")}</th>
                 {!agentId && <th style={{ width: 130 }}>{t("common.table.agent")}</th>}
-                <th style={{ width: 120 }}>{t("common.table.actions")}</th>
+                <th className="table-actions-col">{t("common.table.actions")}</th>
               </tr>
             </thead>
             <tbody>
@@ -273,7 +281,7 @@ export function ThreatList({
                   <td>
                     <span className="row" style={{ gap: 8 }}>
                       <IconShield size={16} style={{ color: "var(--purple-2)", flexShrink: 0 }} />
-                      <span style={{ fontWeight: 600 }}>{f.title}</span>
+                      <span style={{ fontWeight: 600 }}>{layer.threatTitle(f.id, f.title, f.category)}</span>
                       {pathWhitelisted && <span className="tag tag-muted">{t("common.tag.whitelisted")}</span>}
                       {!pathWhitelisted && ignored && <span className="tag tag-muted">{t("common.tag.ignored")}</span>}
                     </span>
@@ -286,19 +294,21 @@ export function ThreatList({
                     {layer.threatSource(f.source)}
                   </td>
                   {!agentId && <td className="muted">{agentsLabel(f)}</td>}
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <span className="act-link" onClick={() => openModal(f)}>{t("common.action.view")}</span>
-                    {!ignored ? (
-                      <>
-                        <span className="dim" style={{ margin: "0 6px" }}>|</span>
-                        <span className="act-link dim" onClick={() => setConfirmIgnore(f)}>{t("common.action.ignore")}</span>
-                      </>
-                    ) : manuallyIgnored ? (
-                      <>
-                        <span className="dim" style={{ margin: "0 6px" }}>|</span>
-                        <span className="act-link" onClick={() => handleUnignore(f)}>{t("common.action.restore")}</span>
-                      </>
-                    ) : null}
+                  <td className="table-actions-cell" onClick={(e) => e.stopPropagation()}>
+                    <div className="table-actions">
+                      <span className="act-link act-view" onClick={() => openModal(f)}>
+                        {t("common.action.view")}
+                      </span>
+                      {!ignored ? (
+                        <span className="act-link act-ignore" onClick={() => setConfirmIgnore(f)}>
+                          {t("common.action.ignore")}
+                        </span>
+                      ) : manuallyIgnored ? (
+                        <span className="act-link act-restore" onClick={() => handleUnignore(f)}>
+                          {t("common.action.restore")}
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               );})}
@@ -326,7 +336,9 @@ export function ThreatList({
         createPortal(
           <ConfirmModal
             title={t("threatList.ignoreTitle")}
-            message={t("threatList.ignoreMessage", { title: confirmIgnore.title })}
+            message={t("threatList.ignoreMessage", {
+              title: layer.threatTitle(confirmIgnore.id, confirmIgnore.title, confirmIgnore.category),
+            })}
             confirmLabel={t("threatList.ignoreConfirm")}
             danger
             onConfirm={() => handleIgnore(confirmIgnore)}
@@ -340,6 +352,7 @@ export function ThreatList({
           path={fileView?.path}
           content={fileView?.content}
           truncated={fileView?.truncated}
+          highlightLine={fileView?.highlightLine}
           loading={fileLoading}
           error={fileError || lastError}
           onClose={() => {
@@ -393,7 +406,7 @@ function ThreatDetailModal({
           <div className="row" style={{ gap: 10, minWidth: 0 }}>
             <IconShield size={20} style={{ color: "var(--purple-2)", flexShrink: 0 }} />
             <div className="modal-title" style={{ minWidth: 0 }}>
-              {finding.title}
+              {layer.threatTitle(finding.id, finding.title, finding.category)}
             </div>
             <SeverityPill sev={sev} />
             {pathWhitelisted && <span className="tag tag-muted">{t("common.tag.whitelisted")}</span>}
@@ -455,37 +468,23 @@ function ThreatDetailModal({
           </div>
 
           <div className="detail-block">
-            <div className="row">
-              <div className="h" style={{ marginBottom: 0 }}>
-                <IconShield className="ic" size={16} /> {t("threatList.recommendation")}
-              </div>
-              <div className="spacer" />
-              <button className="btn btn-primary btn-sm" type="button">
-                <span className="row" style={{ gap: 6 }}>
-                  {t("threatList.fixGuide")} <IconExternal size={13} />
-                </span>
-              </button>
+            <div className="h">
+              <IconShield className="ic" size={16} /> {t("threatList.recommendation")}
             </div>
             <div className="muted" style={{ lineHeight: 1.8, marginTop: 9 }}>
               {layer.threatRecommendation(finding.category, finding.recommendation)}
             </div>
           </div>
 
-          <div className="detail-block detail-block-plain">
-            <div className="h">{t("threatList.plainExplanation")}</div>
-            <div className="plain-text">
-              {layer.threatPlainExplanation(finding.category, finding.plain_explanation)}
-            </div>
-          </div>
         </div>
 
         <div className="modal-foot threat-modal-foot">
           {!ignored ? (
-            <button type="button" className="btn btn-sm" onClick={onIgnore}>
+            <button type="button" className="btn btn-sm btn-danger" onClick={onIgnore}>
               {t("threatList.ignoreThreat")}
             </button>
           ) : manuallyIgnored ? (
-            <button type="button" className="btn btn-sm" onClick={onUnignore}>
+            <button type="button" className="btn btn-sm btn-success" onClick={onUnignore}>
               {t("threatList.unignore")}
             </button>
           ) : (
@@ -507,6 +506,7 @@ function FileContentModal({
   path,
   content,
   truncated,
+  highlightLine,
   loading,
   error,
   onClose,
@@ -514,11 +514,21 @@ function FileContentModal({
   path?: string;
   content?: string;
   truncated?: boolean;
+  highlightLine?: number;
   loading: boolean;
   error?: string | null;
   onClose: () => void;
 }) {
   const { t } = useApp();
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const lines = useMemo(() => (content != null ? content.split("\n") : []), [content]);
+
+  useEffect(() => {
+    if (!highlightLine || !bodyRef.current) return;
+    const row = bodyRef.current.querySelector(`[data-line="${highlightLine}"]`);
+    row?.scrollIntoView({ block: "center" });
+  }, [content, highlightLine]);
+
   return (
     <div className="modal-mask" style={{ zIndex: 60 }} onClick={onClose}>
       <div className="modal modal-lg file-content-modal" onClick={(e) => e.stopPropagation()}>
@@ -546,7 +556,22 @@ function FileContentModal({
                 {t("threatList.fileTruncated")}
               </div>
             )}
-            <pre className="evidence mono file-content-body">{content}</pre>
+            <div ref={bodyRef} className="evidence mono file-content-body file-content-lines">
+              {lines.map((line, i) => {
+                const lineNum = i + 1;
+                const highlighted = highlightLine === lineNum;
+                return (
+                  <div
+                    key={lineNum}
+                    className={`file-content-line${highlighted ? " is-highlight" : ""}`}
+                    data-line={lineNum}
+                  >
+                    <span className="file-content-ln">{lineNum}</span>
+                    <span className="file-content-text">{line || " "}</span>
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
         <div className="modal-foot">

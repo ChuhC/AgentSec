@@ -2,7 +2,7 @@
   "schema_version": 1,
   "meta": {
     "started_at": "",
-    "finished_at": "2026-06-17 11:25:44",
+    "finished_at": "2026-06-17 12:42:46",
     "duration_seconds": 12,
     "scope": "all",
     "cve_status": "ok",
@@ -377,6 +377,66 @@
       "can_uninstall": true
     },
     {
+      "id": "hermes-channel-webchat",
+      "agent_id": "hermes",
+      "type": "channel",
+      "name": "WebChat",
+      "version": "pairing",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "WebChat IM 通道（DM 策略 pairing）",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": "~/.hermes/config.yaml",
+      "config_key": "platforms:webchat",
+      "permissions": [
+        {
+          "id": "ch-h-wc",
+          "name": "访问外部网络",
+          "category": "网络",
+          "source": "agent_config",
+          "source_label": "WebChat",
+          "severity": "medium"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": false
+    },
+    {
+      "id": "hermes-channel-feishu",
+      "agent_id": "hermes",
+      "type": "channel",
+      "name": "飞书",
+      "version": null,
+      "latest_version": null,
+      "status": "disabled",
+      "purpose": "飞书 IM 通道",
+      "source": "Hermes",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": "~/.hermes/config.yaml",
+      "config_key": "platforms:feishu",
+      "permissions": [
+        {
+          "id": "ch-h-fs",
+          "name": "访问外部网络",
+          "category": "网络",
+          "source": "agent_config",
+          "source_label": "飞书",
+          "severity": "medium"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": false
+    },
+    {
       "id": "openclaw-mcp-http",
       "agent_id": "openclaw",
       "type": "mcp",
@@ -498,6 +558,66 @@
       "can_update": false,
       "can_disable": true,
       "can_uninstall": true
+    },
+    {
+      "id": "openclaw-channel-slack",
+      "agent_id": "openclaw",
+      "type": "channel",
+      "name": "Slack",
+      "version": "socket",
+      "latest_version": null,
+      "status": "enabled",
+      "purpose": "Slack IM 通道（模式 socket；凭证引用：botToken, appToken）",
+      "source": "OpenClaw",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": "~/.openclaw/openclaw.json",
+      "config_key": "channels:slack",
+      "permissions": [
+        {
+          "id": "ch-o-slack",
+          "name": "访问外部网络",
+          "category": "网络",
+          "source": "agent_config",
+          "source_label": "Slack",
+          "severity": "medium"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": false
+    },
+    {
+      "id": "openclaw-channel-webchat",
+      "agent_id": "openclaw",
+      "type": "channel",
+      "name": "WebChat",
+      "version": null,
+      "latest_version": null,
+      "status": "disabled",
+      "purpose": "WebChat IM 通道",
+      "source": "OpenClaw",
+      "ecosystem": null,
+      "manager": null,
+      "install_path": null,
+      "package_name": null,
+      "path": "~/.openclaw/openclaw.json",
+      "config_key": "channels:webchat",
+      "permissions": [
+        {
+          "id": "ch-o-wc",
+          "name": "访问外部网络",
+          "category": "网络",
+          "source": "agent_config",
+          "source_label": "WebChat",
+          "severity": "medium"
+        }
+      ],
+      "can_update": false,
+      "can_disable": true,
+      "can_uninstall": false
     },
     {
       "id": "dep-lodash",

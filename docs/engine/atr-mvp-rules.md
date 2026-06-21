@@ -18,17 +18,32 @@
 | **运行时** | pyatr 需 **Python ≥ 3.10**；引擎跑在 `engine/.venv`（3.11） |
 | **CVE** | **不在 ATR**；由 `CVEDetector` + OSV 单独处理 |
 | **OpenClaw 补充** | `openclaw security audit --json`（占位，待接入） |
-| **MVP 规则子集（默认）** | `stable`+`experimental` 且 `severity∈{critical,high,medium}`、`scan_target∈{mcp,skill,both}`；experimental 的 critical/high 另需 `confidence∈{high,medium-high}`，medium 全量纳入 ⇒ **约 276 条**（排除 2 条高误报，见 §2.1）|
+| **MVP 规则子集（默认）** | `stable`+`experimental` 且 `severity∈{critical,high,medium}`、`scan_target∈{mcp,skill,both}`；experimental 的 critical/high 另需 `confidence∈{high,medium-high}`，medium 全量纳入 ⇒ **约 266 条**（排除 12 条高误报，见 §2.1）|
 | **Legacy 最小子集** | `include_experimental=False` 且 `high_severity_only=False` ⇒ **约 16 条** stable |
 
 ### 2.1 MVP 排除规则（静态 SKILL 扫描）
 
-以下规则在 `ATREngine` 中通过 `_EXCLUDED_RULE_IDS` 剔除，避免正常 skill 文档大面积误报：
+排除列表维护在 **`engine/agentsec_engine/data/atr_rules/excluded_rules.yaml`**，
+由 `ExposureDetector` / `ATREngine` 启动时加载（`_load_excluded_rule_ids()`）。
+
+以下规则对 SKILL.md 静态 regex 扫描误报率过高，已从默认子集剔除：
 
 | rule_id | 名称 | 排除原因 |
 |---------|------|----------|
 | `ATR-2026-00001` | Indirect Prompt Injection via External Content | 正常 skill 常描述外部输入/引用 |
+| `ATR-2026-00002` | Indirect Prompt Injection via External Content | 与 00001 同类，文档中极常见 |
+| `ATR-2026-00004` | System Prompt Override Attempt | 文档出现 system prompt 术语即命中 |
 | `ATR-2026-00030` | Cross-Agent Attack Detection | 多 agent 协作文档触发面过宽 |
+| `ATR-2026-00110` | Remote Code Execution via eval() | code-review skill 中 grep 检测 eval 示例 |
+| `ATR-2026-00111` | Shell Metacharacter Injection | bash/CLI 示例（反引号、管道）大面积误报 |
+| `ATR-2026-00118` | Human Approval Fatigue Exploitation | 英文 normal、配置项关键字误命中 |
+| `ATR-2026-00223` | Reverse Shell Dropper (WhatsApp) | localhost 调试 curl，非 C2 |
+| `ATR-2026-00225` | Hardcoded Suspicious IP | 0.0.0.0 等绑定地址出现在错误说明 |
+| `ATR-2026-00398` | Unsafe Model Artifact Load | 与 00110 同类 grep eval 示例 |
+| `ATR-2026-00424` | NL System Prompt Leak | 「Do not expose…」否定句安全规范 |
+| `ATR-2026-00510` | Delayed Tool Invocation | CLI 帮助 run ID 等子串误命中 |
+
+新增排除项时：编辑 `excluded_rules.yaml` 并同步更新本表；重启引擎后重新扫描生效。
 
 扫描前对 `SKILL.md` 剥离 YAML frontmatter（`--- … ---`），正文过短（&lt;32 字符）则跳过。
 
@@ -117,9 +132,9 @@ matches = engine.evaluate(ev)   # → ATRMatch(rule_id, title, severity, confide
 ## 6. 实施进度
 
 - [x] **ATREngine 封装** `engine/agentsec_engine/detectors/exposure.py`：`load_bundled_rules` →
-      默认子集过滤（~276 条，含 medium 全量，排除 2 条高误报）→ `scan_file` 静态评估 → 映射为 `ExposureFinding`
+      默认子集过滤（~266 条，含 medium 全量，排除 12 条高误报）→ `scan_file` 静态评估 → 映射为 `ExposureFinding`
 - [x] **子集口径（默认）**：`stable|experimental` + `severity∈{critical,high,medium}` + 静态 `scan_target`
-      − `_EXCLUDED_RULE_IDS`；experimental 的 critical/high 需 `confidence∈{high,medium-high}`
+      − `excluded_rules.yaml`；experimental 的 critical/high 需 `confidence∈{high,medium-high}`
 - [x] **Legacy 最小子集**：`ExposureDetector(include_experimental=False, high_severity_only=False)` → ~16 条
 - [x] **样例驱动**：`data/samples/`（Hermes/OpenClaw 的 mcp.json + SKILL.md）让真实 ATR 跑出
       `ATR-2026-NNNNN` 命中（含真实行号定位）
