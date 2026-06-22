@@ -8,8 +8,16 @@ import {
   activeThreatCount,
   assetsByAgent,
   cveForAgent,
+  exposureFindingKey,
+  exposureFindingsForSkill,
   exposureForAgent,
+  flattenPermissionMatrixRows,
+  groupPermissionsBySection,
   isThreatIgnored,
+  permissionsForMatrixCell,
+  resolvePermissionLocate,
+  type PermissionSectionKey,
+  type PermissionSourceGroup,
 } from "../selectors";
 import { Radar, RadarAxis } from "../components/Radar";
 import { SeverityPill, ConfirmModal, useSeverityLabels } from "../components/common";
@@ -33,7 +41,7 @@ import {
 
 const SEV_W: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0, safe: 0 };
 const RADAR_CATS = ["文件", "Shell", "网络", "工具", "知识库"];
-const MAIN_TABS = ["概览", "资产管理", "威胁管理", "漏洞管理"] as const;
+const MAIN_TABS = ["概览", "权限管理", "资产管理", "威胁管理", "漏洞管理"] as const;
 const ASSET_SUB_TABS = ["MCP", "Skills", "知识库", "通道", "依赖"] as const;
 const ASSET_TAB_TYPE: Record<(typeof ASSET_SUB_TABS)[number], string> = {
   MCP: "mcp",
@@ -48,6 +56,7 @@ type TFn = ReturnType<typeof useApp>["t"];
 function mainTabLabel(tab: (typeof MAIN_TABS)[number], t: TFn): string {
   const map: Record<(typeof MAIN_TABS)[number], string> = {
     概览: "tabOverview",
+    权限管理: "tabPermissions",
     资产管理: "tabAssets",
     威胁管理: "tabThreats",
     漏洞管理: "tabVulns",
@@ -73,6 +82,7 @@ function resolveInitialTab(initialTab?: string): {
   if (initialTab === "风险管理") initialTab = "威胁管理";
   if (
     initialTab === "资产管理" ||
+    initialTab === "权限管理" ||
     initialTab === "威胁管理" ||
     initialTab === "漏洞管理" ||
     initialTab === "概览"
@@ -105,6 +115,7 @@ export function AgentWorkbench({
   });
   const [refreshing, setRefreshing] = useState(false);
   const [threatFindingId, setThreatFindingId] = useState<string | undefined>();
+  const [highlightAssetId, setHighlightAssetId] = useState<string | undefined>();
   const [confirmAgentUpdate, setConfirmAgentUpdate] = useState<Agent | null>(null);
   const [manualUpdateAgent, setManualUpdateAgent] = useState<Agent | null>(null);
   const [updatingAgent, setUpdatingAgent] = useState(false);
@@ -122,9 +133,15 @@ export function AgentWorkbench({
   const activeThreats = activeThreatCount(snapshot, agentId);
   const hue = agent.kind === "openclaw" ? "#60a5fa" : "#a855f7";
 
-  const goAssets = (sub: (typeof ASSET_SUB_TABS)[number] = "MCP") => {
+  const goAssets = (sub: (typeof ASSET_SUB_TABS)[number] = "MCP", assetId?: string) => {
     setAssetSubTab(sub);
+    setHighlightAssetId(assetId);
     setTab("资产管理");
+  };
+
+  const goThreat = (findingId?: string) => {
+    setThreatFindingId(findingId);
+    setTab("威胁管理");
   };
 
   return (
@@ -190,15 +207,10 @@ export function AgentWorkbench({
           assets={assets}
           activeThreats={activeThreats}
           onGoAssets={() => goAssets("MCP")}
-          onGoThreat={() => {
-            setThreatFindingId(undefined);
-            setTab("威胁管理");
-          }}
+          onGoPermissions={() => setTab("权限管理")}
+          onGoThreat={() => goThreat()}
           onGoVuln={() => setTab("漏洞管理")}
-          onSelectFinding={(findingId) => {
-            setThreatFindingId(findingId);
-            setTab("威胁管理");
-          }}
+          onSelectFinding={(findingId) => goThreat(findingId)}
           onCheckUpdate={async () => {
             setRefreshing(true);
             try {
@@ -254,12 +266,24 @@ export function AgentWorkbench({
           onCancel={() => setManualUpdateAgent(null)}
         />
       )}
+      {tab === "权限管理" && (
+        <PermissionManagementTab
+          agent={agent}
+          assets={assets}
+          onLocateSource={(sub, assetId) => goAssets(sub, assetId)}
+        />
+      )}
       {tab === "资产管理" && (
         <AssetManagementView
           agentId={agentId}
           assets={assets}
           subTab={assetSubTab}
-          onSubTabChange={setAssetSubTab}
+          onSubTabChange={(sub) => {
+            setHighlightAssetId(undefined);
+            setAssetSubTab(sub);
+          }}
+          highlightAssetId={highlightAssetId}
+          onGoThreat={goThreat}
         />
       )}
       {tab === "威胁管理" && (
@@ -278,6 +302,7 @@ function Overview({
   assets,
   activeThreats,
   onGoAssets,
+  onGoPermissions,
   onGoThreat,
   onGoVuln,
   onSelectFinding,
@@ -290,6 +315,7 @@ function Overview({
   assets: Asset[];
   activeThreats: number;
   onGoAssets: () => void;
+  onGoPermissions: () => void;
   onGoThreat: () => void;
   onGoVuln: () => void;
   onSelectFinding: (findingId: string) => void;
@@ -399,8 +425,23 @@ function Overview({
         />
         <div className="card results-insight-card agent-overview-radar">
           <div className="results-insight-head">{t("agentWorkbench.permissionRadar")}</div>
-          <div className="results-radar-wrap">
+          <div
+            className="results-radar-wrap radar-detail-wrap"
+            role="button"
+            tabIndex={0}
+            title={t("agentWorkbench.viewPermissions")}
+            onClick={onGoPermissions}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onGoPermissions();
+              }
+            }}
+          >
             <Radar axes={radarAxes} size={200} />
+            <span className="radar-detail-entry" aria-hidden>
+              <IconLayers size={14} />
+            </span>
           </div>
         </div>
       </div>
@@ -653,18 +694,338 @@ function OptimizationPanel({
   );
 }
 
+function PermissionManagementTab({
+  agent,
+  assets,
+  onLocateSource,
+}: {
+  agent: Agent;
+  assets: Asset[];
+  onLocateSource: (sub: (typeof ASSET_SUB_TABS)[number], assetId: string) => void;
+}) {
+  const { t, layer } = useApp();
+  const sections = useMemo(() => groupPermissionsBySection(agent, assets), [agent, assets]);
+
+  const [catFilter, setCatFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState<PermissionSectionKey | "all">("all");
+  const [query, setQuery] = useState("");
+  const [selection, setSelection] = useState<
+    | { kind: "row"; rowKey: string }
+    | { kind: "cell"; rowKey: string; category: string }
+    | null
+  >(null);
+
+  const totalPerms = useMemo(
+    () => sections.reduce((n, s) => n + s.subGroups.reduce((m, g) => m + g.permissions.length, 0), 0),
+    [sections]
+  );
+  const componentCount = useMemo(
+    () => sections.reduce((n, s) => n + s.subGroups.length, 0),
+    [sections]
+  );
+
+  const availableSources = useMemo(() => sections.map((s) => s.key), [sections]);
+
+  const filteredSections = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base =
+      sourceFilter === "all" ? sections : sections.filter((s) => s.key === sourceFilter);
+    return base
+      .map((section) => {
+        const subGroups = section.subGroups
+          .map((g) => {
+            const permissions = g.permissions.filter((p) => {
+              if (catFilter !== "all" && p.category !== catFilter) return false;
+              if (q) {
+                const hay = [
+                  p.name,
+                  p.category,
+                  layer.permissionName(p.name),
+                  layer.permissionCategory(p.category),
+                  g.sourceLabel,
+                  layer.permissionSourceLabel(g.sourceLabel),
+                  permissionSectionTitle(section.key, t),
+                ]
+                  .join(" ")
+                  .toLowerCase();
+                if (!hay.includes(q)) return false;
+              }
+              return true;
+            });
+            return { ...g, permissions };
+          })
+          .filter((g) => g.permissions.length > 0);
+        return { ...section, subGroups };
+      })
+      .filter((s) => s.subGroups.length > 0);
+  }, [sections, catFilter, sourceFilter, query, layer, t]);
+
+  const matrixRows = useMemo(
+    () => flattenPermissionMatrixRows(filteredSections),
+    [filteredSections]
+  );
+
+  const filteredPerms = useMemo(
+    () => matrixRows.reduce((n, r) => n + r.group.permissions.length, 0),
+    [matrixRows]
+  );
+
+  const selectedRow = useMemo(() => {
+    if (!selection) return null;
+    return matrixRows.find((r) => r.key === selection.rowKey) ?? null;
+  }, [selection, matrixRows]);
+
+  const detailPermissions = useMemo(() => {
+    if (!selectedRow) return [];
+    if (selection?.kind === "cell") {
+      return permissionsForMatrixCell(selectedRow.group, selection.category);
+    }
+    return selectedRow.group.permissions;
+  }, [selectedRow, selection]);
+
+  const handleLocate = (group: PermissionSourceGroup) => {
+    const target = resolvePermissionLocate(group, assets);
+    if (!target) return;
+    onLocateSource(target.subTab, target.assetId);
+  };
+
+  const selectRow = (rowKey: string) => {
+    setSelection((prev) =>
+      prev?.kind === "row" && prev.rowKey === rowKey ? null : { kind: "row", rowKey }
+    );
+  };
+
+  const selectCell = (rowKey: string, category: string, perms: PermissionEntry[]) => {
+    if (!perms.length) return;
+    setSelection((prev) =>
+      prev?.kind === "cell" && prev.rowKey === rowKey && prev.category === category
+        ? null
+        : { kind: "cell", rowKey, category }
+    );
+  };
+
+  return (
+    <div className="permission-list-embedded">
+      <div className="dim" style={{ fontSize: 12.5, marginBottom: 6 }}>
+        {t("agentWorkbench.permissionTabMeta", { count: totalPerms, sources: componentCount })}
+        {filteredPerms !== totalPerms && (
+          <> · {t("threatList.metaFiltered", { count: filteredPerms })}</>
+        )}
+      </div>
+      <div className="dim" style={{ fontSize: 12, marginBottom: 14 }}>
+        {t("agentWorkbench.permissionMatrixHint")}
+      </div>
+
+      <div className="card cve-toolbar" style={{ padding: "14px 16px", marginBottom: 14 }}>
+        <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+          <select
+            className="select-input cve-filter"
+            value={catFilter}
+            onChange={(e) => setCatFilter(e.target.value)}
+          >
+            <option value="all">{t("agentWorkbench.permissionMatrixFilterDimension")}</option>
+            {RADAR_CATS.map((cat) => (
+              <option key={cat} value={cat}>
+                {layer.permissionCategory(cat)}
+              </option>
+            ))}
+          </select>
+          <select
+            className="select-input cve-filter"
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value as PermissionSectionKey | "all")}
+          >
+            <option value="all">{t("agentWorkbench.permissionMatrixFilterSource")}</option>
+            {availableSources.map((key) => (
+              <option key={key} value={key}>
+                {permissionSectionTitle(key, t)}
+              </option>
+            ))}
+          </select>
+          <input
+            className="text-input cve-search"
+            placeholder={t("agentWorkbench.permissionSearchPlaceholder")}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+      </div>
+
+      {matrixRows.length === 0 ? (
+        <div className="card permission-detail-empty muted">
+          {sections.length === 0
+            ? t("agentWorkbench.permissionEmptyNone")
+            : t("agentWorkbench.permissionEmptyNoMatch")}
+        </div>
+      ) : (
+        <>
+          <div className="card permission-matrix-card">
+            <div className="permission-matrix-scroll">
+              <table className="permission-matrix">
+                <thead>
+                  <tr>
+                    <th className="permission-matrix-sticky-col">{t("common.table.name")}</th>
+                    {RADAR_CATS.map((cat) => (
+                      <th key={cat} className="permission-matrix-cat-col">
+                        {layer.permissionCategory(cat)}
+                      </th>
+                    ))}
+                    <th className="permission-matrix-action-col">{t("common.table.actions")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matrixRows.map((row, idx) => {
+                    const prevSection = idx > 0 ? matrixRows[idx - 1].sectionKey : null;
+                    const sectionBreak = prevSection !== null && prevSection !== row.sectionKey;
+                    const rowSelected = selection?.rowKey === row.key && selection.kind === "row";
+                    const locate = resolvePermissionLocate(row.group, assets);
+                    return (
+                      <tr
+                        key={row.key}
+                        className={`permission-matrix-row${sectionBreak ? " section-break" : ""}${rowSelected ? " row-selected" : ""}`}
+                      >
+                        <td className="permission-matrix-sticky-col">
+                          <button
+                            type="button"
+                            className={`permission-matrix-name${rowSelected ? " active" : ""}`}
+                            onClick={() => selectRow(row.key)}
+                          >
+                            <span className="permission-matrix-name-text">{row.group.sourceLabel}</span>
+                            <span className="tag tag-muted permission-matrix-type">
+                              {permissionSectionTitle(row.sectionKey, t)}
+                            </span>
+                          </button>
+                        </td>
+                        {RADAR_CATS.map((cat) => {
+                          const cellPerms = permissionsForMatrixCell(row.group, cat);
+                          const hasPerm = cellPerms.length > 0;
+                          const cellSelected =
+                            selection?.kind === "cell" &&
+                            selection.rowKey === row.key &&
+                            selection.category === cat;
+                          return (
+                            <td key={cat} className="permission-matrix-cat-col">
+                              {hasPerm ? (
+                                <button
+                                  type="button"
+                                  className={`permission-matrix-cell has-perm${cellSelected ? " active" : ""}`}
+                                  title={t("agentWorkbench.permissionGroupCount", {
+                                    count: cellPerms.length,
+                                  })}
+                                  onClick={() => selectCell(row.key, cat, cellPerms)}
+                                >
+                                  {cellPerms.length > 1 ? cellPerms.length : ""}
+                                </button>
+                              ) : (
+                                <span className="permission-matrix-empty">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="permission-matrix-action-col">
+                          {locate ? (
+                            <span className="permission-locate-btn" onClick={() => handleLocate(row.group)}>
+                              {t("agentWorkbench.locateSource")}
+                            </span>
+                          ) : (
+                            <span className="dim">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="permission-matrix-legend row">
+              <span className="permission-matrix-legend-item">
+                <span className="permission-matrix-cell has-perm permission-matrix-legend-swatch" />
+                {t("agentWorkbench.permissionMatrixLegend")}
+              </span>
+            </div>
+          </div>
+
+          {selectedRow && detailPermissions.length > 0 && (
+            <div className="card permission-matrix-detail">
+              <div className="permission-matrix-detail-head row">
+                <div className="permission-matrix-detail-title">
+                  {selection?.kind === "cell"
+                    ? t("agentWorkbench.permissionMatrixDetailCell", {
+                        name: selectedRow.group.sourceLabel,
+                        category: layer.permissionCategory(selection.category),
+                      })
+                    : t("agentWorkbench.permissionMatrixDetailAll", {
+                        name: selectedRow.group.sourceLabel,
+                      })}
+                </div>
+                <span className="spacer" />
+                {resolvePermissionLocate(selectedRow.group, assets) && (
+                  <span
+                    className="permission-locate-btn"
+                    onClick={() => handleLocate(selectedRow.group)}
+                  >
+                    {t("agentWorkbench.locateSource")}
+                  </span>
+                )}
+              </div>
+              <PermissionRowList permissions={detailPermissions} layer={layer} />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function PermissionRowList({
+  permissions,
+  layer,
+}: {
+  permissions: PermissionEntry[];
+  layer: ReturnType<typeof useApp>["layer"];
+}) {
+  return (
+    <>
+      {permissions.map((p) => (
+        <div key={p.id} className="row perm-row permission-detail-row asset-perm-row">
+          <span className="asset-perm-icon">{permIcon(p.category)}</span>
+          <div className="asset-perm-body">
+            <div className="asset-perm-name">{layer.permissionName(p.name)}</div>
+            <div className="asset-perm-cat dim">{layer.permissionCategory(p.category)}</div>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function permissionSectionTitle(key: PermissionSectionKey, t: TFn): string {
+  const map: Record<PermissionSectionKey, string> = {
+    agent_default: t("data.permissionSource.agentDefault"),
+    mcp: t("agentWorkbench.assetMcp"),
+    skill: t("agentWorkbench.assetSkills"),
+    knowledge: t("agentWorkbench.assetKnowledge"),
+    channel: t("agentWorkbench.assetChannel"),
+  };
+  return map[key];
+}
+
 function AssetManagementView({
   agentId,
   assets,
   subTab,
   onSubTabChange,
+  highlightAssetId,
+  onGoThreat,
 }: {
   agentId: string;
   assets: Asset[];
   subTab: (typeof ASSET_SUB_TABS)[number];
   onSubTabChange: (t: (typeof ASSET_SUB_TABS)[number]) => void;
+  highlightAssetId?: string;
+  onGoThreat: (findingId?: string) => void;
 }) {
-  const { t, layer } = useApp();
+  const { t } = useApp();
   const filtered = assets.filter((a) => a.type === ASSET_TAB_TYPE[subTab]);
   return (
     <div>
@@ -679,7 +1040,13 @@ function AssetManagementView({
           </div>
         ))}
       </div>
-      <AssetTab agentId={agentId} assets={filtered} typeLabel={subTab} />
+      <AssetTab
+        agentId={agentId}
+        assets={filtered}
+        typeLabel={subTab}
+        highlightAssetId={highlightAssetId}
+        onGoThreat={onGoThreat}
+      />
     </div>
   );
 }
@@ -914,10 +1281,14 @@ function AssetTab({
   agentId,
   assets,
   typeLabel,
+  highlightAssetId,
+  onGoThreat,
 }: {
   agentId: string;
   assets: Asset[];
   typeLabel: string;
+  highlightAssetId?: string;
+  onGoThreat: (findingId?: string) => void;
 }) {
   const { updateAsset, disableAsset, enableAsset, uninstallAsset, settings, snapshot, t, layer } =
     useApp();
@@ -930,10 +1301,17 @@ function AssetTab({
     setDepModal(null);
   }, [typeLabel, assets.length]);
 
+  useEffect(() => {
+    if (!highlightAssetId) return;
+    const hit = assets.find((a) => a.id === highlightAssetId);
+    if (hit) setDetailAsset(hit);
+  }, [highlightAssetId, assets]);
+
   const isDep = typeLabel === "依赖";
   const isChannel = typeLabel === "通道";
   const isKnowledge = typeLabel === "知识库";
   const isMcpOrSkill = typeLabel === "MCP" || typeLabel === "Skills";
+  const isSkills = typeLabel === "Skills";
 
   if (assets.length === 0) {
     return (
@@ -983,16 +1361,24 @@ function AssetTab({
                 <th style={{ width: 72 }}>{t("agentWorkbench.colUninstall")}</th>
               )}
               {isDep && <th style={{ width: 100 }}>{t("agentWorkbench.colVuln")}</th>}
+              {isSkills && <th style={{ width: 88 }}>{t("agentWorkbench.colThreats")}</th>}
               {!isDep && <th style={{ width: 28 }} />}
             </tr>
           </thead>
           <tbody>
             {assets.map((a) => {
               const st = statusInfo(a, t);
-              const active = isDep ? depModal?.id === a.id : detailAsset?.id === a.id;
+              const active =
+                highlightAssetId === a.id ||
+                (isDep ? depModal?.id === a.id : detailAsset?.id === a.id);
               const cveRow = snapshot
                 ? cveItemsForDep(snapshot, agentId, a.name, a.version).length
                 : 0;
+              const skillThreats =
+                isSkills && snapshot ? exposureFindingsForSkill(snapshot, agentId, a) : [];
+              const skillThreatActive = skillThreats.filter(
+                (f) => !snapshot || !isThreatIgnored(snapshot, f)
+              );
               return (
                 <tr
                   key={a.id}
@@ -1073,6 +1459,24 @@ function AssetTab({
                       {cveRow > 0 ? (
                         <span className="act-link act-cve" onClick={() => openDepModal(a)}>
                           {cveRow} CVE
+                        </span>
+                      ) : (
+                        <span className="dim">{t("common.none")}</span>
+                      )}
+                    </td>
+                  )}
+                  {isSkills && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      {skillThreatActive.length > 0 ? (
+                        <span
+                          className="act-link act-threat"
+                          onClick={() =>
+                            onGoThreat(exposureFindingKey(skillThreatActive[0]))
+                          }
+                        >
+                          {t("agentWorkbench.skillThreatCount", {
+                            count: skillThreatActive.length,
+                          })}
                         </span>
                       ) : (
                         <span className="dim">{t("common.none")}</span>

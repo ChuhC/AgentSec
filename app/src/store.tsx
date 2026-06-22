@@ -141,7 +141,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const layer = useMemo(() => buildLocaleLayer(locale, t), [locale, t]);
   const navAfterScan = useRef(false);
   const snapshotRef = useRef<ScanSnapshot | null>(null);
+  const scanStateRef = useRef<ScanState>("idle");
   snapshotRef.current = snapshot;
+  scanStateRef.current = scanState;
 
   const navigate = useCallback((r: Route) => setRoute(r), []);
   const setSettings = useCallback((s: Partial<Settings>) => {
@@ -198,6 +200,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const hasSnap = !!snapshotRef.current;
           setScanState(hasSnap ? "done" : "idle");
           setRoute(hasSnap ? { name: "results" } : { name: "scan-home" });
+        } else if (event === "engine.exited") {
+          setProgress(null);
+          const st = scanStateRef.current;
+          if (st === "scanning" || st === "cancelling") {
+            const hasSnap = !!snapshotRef.current;
+            setScanState(hasSnap ? "done" : "idle");
+            setRoute(hasSnap ? { name: "results" } : { name: "scan-home" });
+          }
         } else if (event === "scan.error") {
           setScanState("error");
           setScanError(data.message || "扫描失败");
@@ -234,10 +244,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [t]);
 
   const cancelScan = useCallback(async () => {
+    setScanState("cancelling");
+    const fallback = window.setTimeout(() => {
+      if (scanStateRef.current !== "cancelling") return;
+      setProgress(null);
+      const hasSnap = !!snapshotRef.current;
+      setScanState(hasSnap ? "done" : "idle");
+      setRoute(hasSnap ? { name: "results" } : { name: "scan-home" });
+    }, 8000);
     try {
-      setScanState("cancelling");
       await window.agentsec.request("scan.cancel");
     } catch (e: any) {
+      window.clearTimeout(fallback);
       setScanState("scanning");
       setLastError(e?.message || t("errors.cancelFailed"));
     }
