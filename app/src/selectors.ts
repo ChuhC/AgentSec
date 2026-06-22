@@ -1,8 +1,11 @@
 import type {
+  Agent,
   Asset,
+  AssetTypeT,
   CVEFinding,
   CVEItem,
   ExposureFinding,
+  PermissionEntry,
   ScanSnapshot,
   Severity,
 } from "./types";
@@ -535,6 +538,252 @@ function permissionScores(s: ScanSnapshot, agentId: string): number[] {
     const max = inCat.reduce((m, p) => Math.max(m, PERM_SEV_W[p.severity]), 0);
     return max / 3;
   });
+}
+
+export type AssetSubTabKey = "MCP" | "Skills" | "知识库" | "通道" | "依赖";
+
+export interface PermissionSourceGroup {
+  sourceLabel: string;
+  source: string;
+  permissions: PermissionEntry[];
+  assetId?: string;
+}
+
+export type PermissionSectionKey = "agent_default" | "mcp" | "skill" | "knowledge" | "channel";
+
+export interface PermissionSection {
+  key: PermissionSectionKey;
+  subGroups: PermissionSourceGroup[];
+}
+
+const PERMISSION_SECTION_ORDER: PermissionSectionKey[] = [
+  "agent_default",
+  "mcp",
+  "skill",
+  "knowledge",
+  "channel",
+];
+
+const ASSET_TYPE_TO_SECTION: Partial<Record<AssetTypeT, PermissionSectionKey>> = {
+  mcp: "mcp",
+  skill: "skill",
+  knowledge: "knowledge",
+  channel: "channel",
+};
+
+const SECTION_SOURCE: Record<PermissionSectionKey, string> = {
+  agent_default: "agent_config",
+  mcp: "mcp",
+  skill: "skill",
+  knowledge: "knowledge",
+  channel: "channel",
+};
+
+function sortSubGroups(a: PermissionSourceGroup, b: PermissionSourceGroup): number {
+  const maxA = a.permissions.reduce((m, p) => Math.max(m, SEV_WEIGHT[p.severity]), 0);
+  const maxB = b.permissions.reduce((m, p) => Math.max(m, SEV_WEIGHT[p.severity]), 0);
+  return maxB - maxA || a.sourceLabel.localeCompare(b.sourceLabel);
+}
+
+function dedupePermissions(perms: PermissionEntry[]): PermissionEntry[] {
+  const seen = new Set<string>();
+  const out: PermissionEntry[] = [];
+  for (const p of perms) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    out.push(p);
+  }
+  return out;
+}
+
+/** 权限 Tab：先按类型（Agent 默认 / MCP / Skill…）聚合，再按资产/组件分子组 */
+export function groupPermissionsBySection(agent: Agent, assets: Asset[]): PermissionSection[] {
+  const bucket = new Map<PermissionSectionKey, PermissionSourceGroup[]>();
+
+  const push = (key: PermissionSectionKey, group: PermissionSourceGroup) => {
+    const list = bucket.get(key) ?? [];
+    list.push(group);
+    bucket.set(key, list);
+  };
+
+  const agentPerms = dedupePermissions(agent.permissions);
+  if (agentPerms.length) {
+    push("agent_default", {
+      sourceLabel: "Agent 默认",
+      source: "agent_config",
+      permissions: agentPerms,
+    });
+  }
+
+  for (const asset of assets) {
+    const perms = dedupePermissions(asset.permissions);
+    if (!perms.length) continue;
+    const sectionKey = ASSET_TYPE_TO_SECTION[asset.type];
+    if (!sectionKey) continue;
+    push(sectionKey, {
+      sourceLabel: asset.name,
+      source: SECTION_SOURCE[sectionKey],
+      permissions: perms,
+      assetId: asset.id,
+    });
+  }
+
+  return PERMISSION_SECTION_ORDER.filter((key) => bucket.has(key)).map((key) => ({
+    key,
+    subGroups: (bucket.get(key) ?? []).sort(sortSubGroups),
+  }));
+}
+
+export interface PermissionMatrixRow {
+  key: string;
+  sectionKey: PermissionSectionKey;
+  group: PermissionSourceGroup;
+}
+
+/** 权限矩阵行：按 section 顺序展平为组件列表 */
+export function flattenPermissionMatrixRows(sections: PermissionSection[]): PermissionMatrixRow[] {
+  const out: PermissionMatrixRow[] = [];
+  for (const section of sections) {
+    for (const group of section.subGroups) {
+      out.push({
+        key: `${section.key}:${group.assetId ?? group.sourceLabel}`,
+        sectionKey: section.key,
+        group,
+      });
+    }
+  }
+  return out;
+}
+
+/** 某组件在指定类别下的权限（矩阵单元格） */
+export function permissionsForMatrixCell(
+  group: PermissionSourceGroup,
+  category: string
+): PermissionEntry[] {
+  return group.permissions.filter((p) => p.category === category);
+}
+
+export function maxPermissionSeverity(perms: PermissionEntry[]): Severity | null {
+  if (!perms.length) return null;
+  let best: Severity = "low";
+  let w = 0;
+  for (const p of perms) {
+    const pw = SEV_WEIGHT[p.severity] ?? 0;
+    if (pw > w) {
+      w = pw;
+      best = p.severity;
+    }
+  }
+  return best;
+}
+
+/** @deprecated 使用 groupPermissionsBySection */
+export function groupPermissionsBySource(
+  agent: Agent,
+  assets: Asset[]
+): PermissionSourceGroup[] {
+  return groupPermissionsBySection(agent, assets).flatMap((s) => s.subGroups);
+}
+
+const SOURCE_TO_SUB_TAB: Record<string, AssetSubTabKey | null> = {
+  mcp: "MCP",
+  skill: "Skills",
+  knowledge: "知识库",
+  channel: "通道",
+  dependency: "依赖",
+  agent_config: null,
+};
+
+const ASSET_TYPE_TO_SUB_TAB: Record<AssetTypeT, AssetSubTabKey> = {
+  mcp: "MCP",
+  skill: "Skills",
+  knowledge: "知识库",
+  channel: "通道",
+  dependency: "依赖",
+};
+
+function assetSubTabForType(type: AssetTypeT): AssetSubTabKey {
+  return ASSET_TYPE_TO_SUB_TAB[type];
+}
+
+/** 解析「定位来源」目标：资产管理子 Tab + 资产 id */
+export function resolvePermissionLocate(
+  group: PermissionSourceGroup,
+  assets: Asset[]
+): { subTab: AssetSubTabKey; assetId: string } | null {
+  if (group.source === "agent_config" || !group.assetId) return null;
+  const subTab = SOURCE_TO_SUB_TAB[group.source];
+  if (!subTab) return null;
+  const hit = assets.find((a) => a.id === group.assetId);
+  if (hit) return { subTab, assetId: hit.id };
+  const label = group.sourceLabel.toLowerCase();
+  const fuzzy = assets.find((a) => {
+    if (assetSubTabForType(a.type) !== subTab) return false;
+    const name = a.name.toLowerCase();
+    return label.includes(name) || name.includes(label.replace(/ mcp$/, ""));
+  });
+  return fuzzy ? { subTab, assetId: fuzzy.id } : null;
+}
+
+function normThreatPath(path: string): string {
+  return threatLocationPath(path).replace(/\\/g, "/").toLowerCase();
+}
+
+function skillMatchNeedles(asset: Asset): string[] {
+  const needles = new Set<string>();
+  if (asset.name) needles.add(asset.name.toLowerCase());
+  if (asset.install_path) needles.add(normThreatPath(asset.install_path));
+  if (asset.path) needles.add(normThreatPath(asset.path));
+  if (asset.package_name) needles.add(asset.package_name.toLowerCase());
+  const slug = asset.name
+    .toLowerCase()
+    .replace(/\s+skill$/i, "")
+    .replace(/\s+/g, "-");
+  if (slug.length >= 2) needles.add(slug);
+  if (asset.install_path) {
+    needles.add(`${normThreatPath(asset.install_path)}/skill.md`);
+  }
+  return [...needles].filter((n) => n.length >= 2);
+}
+
+function pathMatchesNeedle(path: string, needle: string): boolean {
+  const norm = normThreatPath(path);
+  return norm.includes(needle) || needle.includes(norm);
+}
+
+/** Skill 资产关联的暴露面 finding（按路径 / 证据 / 名称匹配） */
+export function exposureFindingMatchesSkill(f: ExposureFinding, asset: Asset): boolean {
+  const needles = skillMatchNeedles(asset);
+  if (!needles.length) return false;
+
+  const locs = f.locations?.length ? f.locations : f.location ? [f.location] : [];
+  for (const loc of locs) {
+    for (const n of needles) {
+      if (pathMatchesNeedle(loc, n)) return true;
+    }
+    const normLoc = normThreatPath(loc);
+    if (normLoc.endsWith("/skill.md") || normLoc.endsWith("/skill.md.disabled")) {
+      const parts = normLoc.split("/");
+      const dir = parts[parts.length - 2] ?? "";
+      if (needles.some((n) => dir.includes(n) || n.includes(dir))) return true;
+    }
+  }
+
+  const hay = `${f.evidence}\n${f.title}\n${f.impact}`.toLowerCase();
+  for (const n of needles) {
+    if (n.length >= 3 && hay.includes(n)) return true;
+  }
+  return false;
+}
+
+export function exposureFindingsForSkill(
+  s: ScanSnapshot,
+  agentId: string,
+  asset: Asset
+): ExposureFinding[] {
+  return exposureForAgent(s, agentId)
+    .filter((f) => exposureFindingMatchesSkill(f, asset))
+    .sort((a, b) => SEV_WEIGHT[b.severity] - SEV_WEIGHT[a.severity]);
 }
 
 /** 全机各 Agent 权限雷达数据 */

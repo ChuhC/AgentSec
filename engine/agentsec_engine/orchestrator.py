@@ -64,7 +64,9 @@ class ScanOrchestrator:
             time.sleep(0.4)
         if self._cancelled:
             return {"cancelled": True}
-        agents, assets, atr_targets, adapter_status = discover_all(scope_path)
+        agents, assets, atr_targets, adapter_status = discover_all(
+            scope_path, should_cancel=self._is_cancelled
+        )
         if self._cancelled:
             return {"cancelled": True}
 

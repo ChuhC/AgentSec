@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from ..enrichment import enrich_discovery
 from ..models import Agent, Asset
@@ -51,6 +51,7 @@ def discover_agent(
 def discover_all(
     scope_path: Optional[str] = None,
     online: bool = True,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> Tuple[List[Agent], List[Asset], List[Tuple[str, str, List[str]]], dict]:
     """运行所有 Adapter，返回 (agents, assets, atr_targets, adapter_status)。
 
@@ -63,6 +64,8 @@ def discover_all(
     status: dict = {}
     homes = _adapter_homes(scope_path)
     for cls in ADAPTERS:
+        if should_cancel and should_cancel():
+            break
         adapter: AgentAdapter = cls(scope_path=scope_path)
         try:
             agent = adapter.detect()
@@ -76,5 +79,6 @@ def discover_all(
             status[cls.kind] = "ok"
         except Exception as exc:  # noqa: BLE001 - 隔离单 Adapter 失败
             status[cls.kind] = "error: " + str(exc)
-    enrich_discovery(agents, assets, homes=homes, online=online)
+    if not (should_cancel and should_cancel()):
+        enrich_discovery(agents, assets, homes=homes, online=online)
     return agents, assets, targets, status

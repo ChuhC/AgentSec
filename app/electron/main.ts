@@ -33,6 +33,11 @@ function resolveEngine(): { cmd: string; args: string[]; cwd: string } {
 
 let win: BrowserWindow | null = null;
 let engine: ChildProcessWithoutNullStreams | null = null;
+/** 每次 start/stop 递增，避免旧子进程 exit 回调误清空新 engine 引用。 */
+let engineGeneration = 0;
+let pageLoadCount = 0;
+let scanInProgress = false;
+let deferredEngineRestart = false;
 
 // IPC 请求 id → resolve
 const pending = new Map<number, (v: any) => void>();
@@ -48,7 +53,17 @@ function log(...args: unknown[]) {
 }
 
 function emitEngineEvent(payload: { event: string; data: any }) {
-  if (payload.event === "progress" && DEBUG) {
+  const { event } = payload;
+  if (event === "progress") {
+    scanInProgress = true;
+  } else if (
+    event === "scan.completed" ||
+    event === "scan.cancelled" ||
+    event === "scan.error"
+  ) {
+    finishScanActivity();
+  }
+  if (event === "progress" && DEBUG) {
     log("engine-event progress", payload.data?.percent, payload.data?.label);
   } else if (payload.event !== "progress" && DEBUG) {
     log("engine-event", payload.event);
@@ -70,6 +85,7 @@ function flushPendingEvents() {
 
 function stopEngine() {
   if (!engine) return;
+  engineGeneration += 1;
   try {
     engine.stdin.end();
   } catch {
@@ -85,9 +101,22 @@ function stopEngine() {
 
 /** 开发态页面热更新不会重启 Python 子进程，需显式 reload 引擎以加载新 IPC。 */
 function restartEngine() {
+  if (scanInProgress) {
+    deferredEngineRestart = true;
+    log("defer engine restart: scan in progress");
+    return;
+  }
   stopEngine();
   stdoutBuf = "";
   startEngine();
+}
+
+function finishScanActivity() {
+  scanInProgress = false;
+  if (deferredEngineRestart) {
+    deferredEngineRestart = false;
+    restartEngine();
+  }
 }
 
 function enginePathEnv(): string {
@@ -102,15 +131,17 @@ function enginePathEnv(): string {
 }
 
 function startEngine() {
+  const gen = ++engineGeneration;
   const { cmd, args, cwd } = resolveEngine();
   log("start engine:", cmd, args.join(" "), "cwd=", cwd);
-  engine = spawn(cmd, args, {
+  const child = spawn(cmd, args, {
     cwd,
     env: { ...process.env, PYTHONUNBUFFERED: "1", PATH: enginePathEnv() },
   });
+  engine = child;
 
-  engine.stdout.setEncoding("utf-8");
-  engine.stdout.on("data", (chunk: string) => {
+  child.stdout.setEncoding("utf-8");
+  child.stdout.on("data", (chunk: string) => {
     stdoutBuf += chunk;
     let idx: number;
     while ((idx = stdoutBuf.indexOf("\n")) >= 0) {
@@ -120,19 +151,32 @@ function startEngine() {
     }
   });
 
-  engine.stderr.setEncoding("utf-8");
-  engine.stderr.on("data", (chunk: string) => {
+  child.stderr.setEncoding("utf-8");
+  child.stderr.on("data", (chunk: string) => {
     // 引擎日志走 stderr，dev 时在运行 npm run dev 的终端里可见
     process.stderr.write("[py] " + chunk);
   });
 
-  engine.on("exit", (code) => {
+  child.on("exit", (code) => {
+    if (gen !== engineGeneration) return;
     console.error("[main] engine exited:", code);
     engine = null;
+    const wasScanning = scanInProgress;
+    finishScanActivity();
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("engine-event", {
+        event: "engine.exited",
+        data: { code, scanInProgress: wasScanning },
+      });
+    }
+    setTimeout(() => {
+      if (!engine) startEngine();
+    }, 300);
   });
 
   // 引擎就绪探测
   setTimeout(() => {
+    if (gen !== engineGeneration) return;
     engineRequest("ping", {})
       .then(() => log("engine ping ok"))
       .catch((e) => console.error("[main] engine ping failed:", e.message));
@@ -198,7 +242,9 @@ function createWindow() {
   }
   win.webContents.on("did-finish-load", () => {
     flushPendingEvents();
-    if (devUrl) restartEngine();
+    pageLoadCount += 1;
+    // 仅热更新重载时重启 Python；首次加载已在 whenReady 启动
+    if (devUrl && pageLoadCount > 1) restartEngine();
   });
 }
 
@@ -207,9 +253,8 @@ ipcMain.handle("engine-request", async (_e, method: string, params: any) => {
 });
 
 app.whenReady().then(() => {
+  startEngine();
   createWindow();
-  // 开发态在 did-finish-load 时 restartEngine；打包态在此启动一次
-  if (!process.env["VITE_DEV_SERVER_URL"]) startEngine();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
