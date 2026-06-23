@@ -5,9 +5,9 @@
 
 **Language:** **English** · [简体中文](#简体中文)
 
-> Know your local AI agents' security posture — exposure, CVEs, and MCP / Skills assets, all on-device.
+> One-click local scans for your AI agents — exposure risks, dependency CVEs, and MCP / Skills assets. Everything stays on your device.
 
-**v0.1 initial preview** — desktop shell, Hermes/OpenClaw adapters, and rule packs are still evolving quickly. Expect breaking UI/API changes; Issues and PRs are welcome.
+**v0.1 early preview** — Actively evolving; UI and APIs may change. Issues and PRs welcome.
 
 AgentSec is a **macOS-first desktop security scanner** built for **Hermes** and **OpenClaw**. It does not replace your agents; it runs a local health check: surface misconfigurations and risky skills, match dependencies against known CVEs, and let you manage MCP servers, Skills, knowledge bases, and packages in one place — **no cloud, no telemetry, no account**.
 
@@ -195,9 +195,9 @@ Report security issues via [SECURITY.md](SECURITY.md) and GitHub Security Adviso
 
 **Language:** [English](#agentsec) · **简体中文**
 
-> 一键摸清本机 AI Agent 的安全底数 — 暴露面、组件 CVE、MCP / Skills 资产，全部在本地完成。
+> 一键扫描本机 AI Agent：暴露面、组件 CVE、MCP / Skills 资产。
 
-**v0.1 初始预览** — 桌面壳、Hermes/OpenClaw 适配与规则库仍在快速迭代；API 与 UI 可能有破坏性变更，欢迎 Issue / PR 共建。
+**v0.1 早期预览** — 功能仍在快速迭代，界面与接口可能调整。欢迎 Issue / PR 反馈与共建。
 
 AgentSec 是以 **macOS 为主平台** 的桌面安全工具，专为 **Hermes** 与 **OpenClaw** 设计。它不替代你的 Agent，而是在旁边做一轮「体检」：扫配置与技能里的风险、查依赖里的已知漏洞，并让你在同一界面里管理 MCP、Skills、知识库与组件 — **数据不出本机，无遥测，无账号**。
 
