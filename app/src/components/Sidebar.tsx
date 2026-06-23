@@ -1,5 +1,5 @@
 import React from "react";
-import { useApp } from "../store";
+import { resolveScanRoute, useApp } from "../store";
 import {
   IconAssets,
   IconCube,
@@ -10,7 +10,7 @@ import {
 } from "./Icons";
 
 export function Sidebar() {
-  const { route, navigate, snapshot, t } = useApp();
+  const { route, navigate, snapshot, scanState, t } = useApp();
   const name = route.name;
 
   const isScan =
@@ -21,10 +21,7 @@ export function Sidebar() {
   const isAssets = name === "agent-list" || name === "agent-workbench";
   const isSettings = name === "settings";
 
-  const goScan = () => {
-    if (snapshot) navigate({ name: "results" });
-    else navigate({ name: "scan-home" });
-  };
+  const goScan = () => navigate(resolveScanRoute(snapshot, scanState));
 
   const goThreat = () => {
     if (!snapshot) return;

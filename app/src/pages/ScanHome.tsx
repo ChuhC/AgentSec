@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useApp } from "../store";
 import type { ScanScope } from "../store";
 import {
@@ -74,9 +74,15 @@ function ScanPathModal({
 }
 
 export function ScanHome() {
-  const { startScan, snapshot, t } = useApp();
+  const { startScan, snapshot, scanState, navigate, t } = useApp();
   const [modal, setModal] = useState(false);
   const last = snapshot?.meta.finished_at || "-";
+
+  useEffect(() => {
+    if (scanState === "scanning" || scanState === "cancelling") {
+      navigate({ name: "scanning" });
+    }
+  }, [scanState, navigate]);
 
   return (
     <main className="main">

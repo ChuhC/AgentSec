@@ -48,6 +48,18 @@ export type Route =
 
 export type ScanState = "idle" | "scanning" | "cancelling" | "done" | "error";
 
+/** 扫描菜单应跳转的路由：进行中时始终回到进度页。 */
+export function resolveScanRoute(
+  snapshot: ScanSnapshot | null,
+  scanState: ScanState
+): Route {
+  if (scanState === "scanning" || scanState === "cancelling") {
+    return { name: "scanning" };
+  }
+  if (snapshot) return { name: "results" };
+  return { name: "scan-home" };
+}
+
 export interface Settings {
   language: Locale;
   theme: ThemeSetting;

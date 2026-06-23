@@ -11,8 +11,10 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "screenshots": "node scripts/capture-readme-screenshots.mjs",
-    "build:engine": "cd ../engine && .venv/bin/pyinstaller --onedir --name agentsec-engine --noconfirm --clean --distpath dist_pkg --workpath build_pkg --paths . --collect-all pyatr --collect-all cvss --collect-all ruamel --collect-submodules agentsec_engine packaging/run_engine.py",
-    "dist": "npm run build:engine && npm run build && electron-builder --mac dmg"
+    "build:engine": "node ../scripts/build-engine.cjs",
+    "dist:mac": "electron-builder --mac dmg",
+    "dist:win": "electron-builder --win nsis",
+    "dist": "npm run dist:mac"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",
@@ -53,6 +55,16 @@
         "dmg"
       ],
       "identity": null
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }

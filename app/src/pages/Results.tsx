@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useApp } from "../store";
 import {
   activeThreatCount,
@@ -219,7 +219,14 @@ function SummaryCard({
 }
 
 export function Results() {
-  const { snapshot, navigate, startScan, t, layer } = useApp();
+  const { snapshot, navigate, startScan, scanState, t, layer } = useApp();
+
+  useEffect(() => {
+    if (scanState === "scanning" || scanState === "cancelling") {
+      navigate({ name: "scanning" });
+    }
+  }, [scanState, navigate]);
+
   if (!snapshot) {
     return (
       <main className="main">

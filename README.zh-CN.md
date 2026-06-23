@@ -50,12 +50,72 @@ cd ../app && npm install && npm run dev
 
 Electron 下载慢时可设：`ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"`
 
-打包 macOS 应用：`./scripts/package-dmg.sh` → `app/release/AgentSec-*.dmg`
+---
+
+## 打包发布
+
+**PyInstaller 冻结的 Python 引擎必须在目标操作系统上构建**（无法在 Mac 上直接产出可在 Windows 运行的 `.exe`）。Electron 前端可在各平台分别打包；推荐用仓库内一键脚本。
+
+### macOS（DMG）
+
+在 macOS 上执行：
+
+```bash
+./scripts/package-dmg.sh
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--skip-engine` | 跳过 PyInstaller（引擎未改时可加速） |
+| `--skip-npm-install` | 跳过 `npm install` |
+
+产物：`app/release/AgentSec-*.dmg`  
+可选图标：`app/build/icon.icns`
+
+### Windows（NSIS 安装包）
+
+在 Windows 上打开 PowerShell（项目根目录）：
+
+```powershell
+.\scripts\package-win.ps1
+```
+
+| 参数 | 说明 |
+|------|------|
+| `-SkipEngine` | 跳过 PyInstaller |
+| `-SkipNpmInstall` | 跳过 `npm install` |
+
+产物：`app/release/AgentSec Setup *.exe`  
+可选图标：`app/build/icon.ico`
+
+### 手动分步（`app/` 目录）
+
+```bash
+npm run build:engine   # 调用 ../scripts/build-engine.cjs，须在对应 OS 上执行
+npm run build          # TypeScript + Vite + Electron 主进程
+npm run dist:mac       # electron-builder → dmg
+npm run dist:win       # electron-builder → NSIS（在 Windows 上执行）
+```
+
+国内网络可设：`ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"`
+
+---
+
+## 配置
 
 | 环境变量 | 说明 |
 |----------|------|
-| `AGENTSEC_DATA_DIR` | 数据目录（默认 `~/Library/Application Support/agentSec/`） |
+| `AGENTSEC_DATA_DIR` | 数据目录（覆盖平台默认；打包态由 Electron 传入 `userData`） |
+| `AGENTSEC_ENGINE_DIR` | 开发态引擎源码目录（默认 `app/../engine`） |
+| `AGENTSEC_PYTHON` | 开发态 Python 解释器（默认 `engine/.venv` 内解释器） |
 | `AGENTSEC_DEBUG` | `1` 开启调试日志 |
+
+默认数据目录（未设置 `AGENTSEC_DATA_DIR` 时）：
+
+| 平台 | 路径 |
+|------|------|
+| macOS | `~/Library/Application Support/AgentSec/` |
+| Windows | `%APPDATA%\AgentSec\` |
 
 更多设计说明见 [`docs/`](docs/)。
 
