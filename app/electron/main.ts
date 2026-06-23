@@ -1,35 +1,12 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { spawn, ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync } from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { engineChildEnv, resolveEngine } from "./paths";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// dist-electron/ 在 app/ 下；引擎在 ../engine
 const APP_ROOT = path.join(__dirname, "..");
-const ENGINE_DIR =
-  process.env.AGENTSEC_ENGINE_DIR || path.join(APP_ROOT, "..", "engine");
-
-// pyATR 需 Python ≥ 3.10：优先使用 engine/.venv，其次环境变量，最后系统 python3
-function resolvePython(): string {
-  if (process.env.AGENTSEC_PYTHON) return process.env.AGENTSEC_PYTHON;
-  const venv = path.join(ENGINE_DIR, ".venv", "bin", "python");
-  if (existsSync(venv)) return venv;
-  return "python3";
-}
-
-// 引擎启动方式：
-//  - 打包态（dmg）：spawn PyInstaller 冻结的二进制（无需系统 Python）
-//  - 开发态：python -m agentsec_engine（用 engine/.venv）
-function resolveEngine(): { cmd: string; args: string[]; cwd: string } {
-  if (app.isPackaged) {
-    const dir = path.join(process.resourcesPath, "engine");
-    return { cmd: path.join(dir, "agentsec-engine"), args: [], cwd: dir };
-  }
-  return { cmd: resolvePython(), args: ["-m", "agentsec_engine"], cwd: ENGINE_DIR };
-}
 
 let win: BrowserWindow | null = null;
 let engine: ChildProcessWithoutNullStreams | null = null;
@@ -119,24 +96,13 @@ function finishScanActivity() {
   }
 }
 
-function enginePathEnv(): string {
-  const home = os.homedir();
-  const extra = [
-    path.join(home, ".npm-global", "bin"),
-    path.join(home, ".local", "bin"),
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-  ];
-  return [...extra, process.env.PATH ?? ""].filter(Boolean).join(path.delimiter);
-}
-
 function startEngine() {
   const gen = ++engineGeneration;
-  const { cmd, args, cwd } = resolveEngine();
+  const { cmd, args, cwd } = resolveEngine(APP_ROOT);
   log("start engine:", cmd, args.join(" "), "cwd=", cwd);
   const child = spawn(cmd, args, {
     cwd,
-    env: { ...process.env, PYTHONUNBUFFERED: "1", PATH: enginePathEnv() },
+    env: engineChildEnv(),
   });
   engine = child;
 
@@ -218,20 +184,23 @@ function engineRequest(method: string, params: any): Promise<any> {
 }
 
 function createWindow() {
-  win = new BrowserWindow({
+  const winOptions: Electron.BrowserWindowConstructorOptions = {
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 640,
     backgroundColor: "#0a0612",
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },
-  });
+  };
+  if (process.platform === "darwin") {
+    winOptions.titleBarStyle = "hiddenInset";
+    winOptions.trafficLightPosition = { x: 16, y: 18 };
+  }
+  win = new BrowserWindow(winOptions);
 
   const devUrl = process.env["VITE_DEV_SERVER_URL"];
   if (devUrl) {

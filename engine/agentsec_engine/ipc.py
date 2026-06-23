@@ -23,7 +23,8 @@ from .discovery.registry import discover_agent
 from .orchestrator import ScanOrchestrator
 from .paths import safe_normalize_readable_path
 from .runtime import get_agent_runtime
-from .store import SnapshotStore, default_data_dir
+from .store import SnapshotStore
+from .paths import default_data_dir
 
 
 def _log_dir() -> str:

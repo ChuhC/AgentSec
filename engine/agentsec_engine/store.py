@@ -15,20 +15,8 @@ import threading
 from typing import Optional
 
 from .models import ScanSnapshot
-from .paths import safe_normalize_readable_path
+from .paths import default_data_dir, safe_normalize_readable_path
 from .threat_whitelist import apply_default_whitelist_to_snapshot
-
-
-def default_data_dir() -> str:
-    """macOS: ~/Library/Application Support/agentSec/。
-
-    允许用 AGENTSEC_DATA_DIR 覆盖（开发/测试用）。
-    """
-    override = os.environ.get("AGENTSEC_DATA_DIR")
-    if override:
-        return override
-    home = os.path.expanduser("~")
-    return os.path.join(home, "Library", "Application Support", "agentSec")
 
 
 class SnapshotStore:

@@ -50,12 +50,73 @@ cd ../app && npm install && npm run dev
 
 Slow Electron downloads: `ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"`
 
-macOS app bundle: `./scripts/package-dmg.sh` → `app/release/AgentSec-*.dmg`
+---
+
+## Building releases
+
+The **PyInstaller-frozen Python engine must be built on the target OS** (you cannot produce a runnable Windows `.exe` engine from macOS alone). Package the Electron shell on each platform separately; use the repo scripts below.
+
+### macOS (DMG)
+
+On macOS:
+
+```bash
+./scripts/package-dmg.sh
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--skip-engine` | Skip PyInstaller (faster when the engine unchanged) |
+| `--skip-npm-install` | Skip `npm install` |
+
+Output: `app/release/AgentSec-*.dmg`  
+Optional icon: `app/build/icon.icns`
+
+### Windows (NSIS installer)
+
+In PowerShell from the repo root on Windows:
+
+```powershell
+.\scripts\package-win.ps1
+```
+
+| Flag | Purpose |
+|------|---------|
+| `-SkipEngine` | Skip PyInstaller |
+| `-SkipNpmInstall` | Skip `npm install` |
+
+Output: `app/release/AgentSec Setup *.exe`  
+Optional icon: `app/build/icon.ico`
+
+### Manual steps (from `app/`)
+
+```bash
+npm run build:engine   # runs ../scripts/build-engine.cjs on the current OS
+npm run build          # TypeScript + Vite + Electron main
+npm run dist:mac       # electron-builder → dmg
+npm run dist:win       # electron-builder → NSIS (run on Windows)
+```
+
+Mirror for electron-builder binaries (optional):  
+`ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"`
+
+---
+
+## Configuration
 
 | Variable | Purpose |
 |----------|---------|
-| `AGENTSEC_DATA_DIR` | Data dir (default `~/Library/Application Support/agentSec/`) |
+| `AGENTSEC_DATA_DIR` | Override data directory (packaged builds receive Electron `userData`) |
+| `AGENTSEC_ENGINE_DIR` | Dev engine source root (default `app/../engine`) |
+| `AGENTSEC_PYTHON` | Dev Python binary (default: venv under `engine/.venv`) |
 | `AGENTSEC_DEBUG` | `1` for verbose logs |
+
+Default data directory when `AGENTSEC_DATA_DIR` is unset:
+
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/AgentSec/` |
+| Windows | `%APPDATA%\AgentSec\` |
 
 Further docs in [`docs/`](docs/).
 
