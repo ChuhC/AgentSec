@@ -232,6 +232,11 @@ def openclaw_workspace_dir(home: str, cfg: dict) -> Optional[str]:
 
 def resolve_openclaw_cli() -> Optional[str]:
     """定位 openclaw CLI（GUI 子进程 PATH 常不含 npm global bin）。"""
+    from ..config import get_agent_bin
+
+    configured = get_agent_bin("openclaw")
+    if configured and os.path.isfile(configured) and os.access(configured, os.X_OK):
+        return configured
     found = shutil.which("openclaw")
     if found:
         return found

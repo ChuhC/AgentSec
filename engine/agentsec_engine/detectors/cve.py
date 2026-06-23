@@ -19,6 +19,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, List, Optional, Tuple
 
+from .. import config
 from ..models import Asset, CVEFinding, CVEItem, CVEStatus, Severity
 
 OSV_URL = "https://api.osv.dev/v1/query"
@@ -292,7 +293,7 @@ class CVEProvider:
 class RemoteOSVProvider(CVEProvider):
     def __init__(self, online: bool = True):
         # online=False 可强制模拟离线（演示 CVE 不可用态）
-        self.online = online and not os.environ.get("AGENTSEC_CVE_OFFLINE")
+        self.online = online and config.cve_online(default=online)
 
     def _fetch_vuln(self, vuln_id: str) -> dict:
         url = OSV_VULN_URL + urllib.parse.quote(vuln_id, safe="")

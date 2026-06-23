@@ -282,6 +282,7 @@ const zh = {
     scan: "扫描",
     retention: "结果保留",
     retentionValue: "仅保留最近一次扫描",
+    cveOnline: "联网查询 CVE (OSV)",
     assets: "资产管理",
     confirmUpdate: "更新前确认",
     confirmUninstall: "卸载前确认",
@@ -289,6 +290,8 @@ const zh = {
     about: "关于",
     version: "版本",
     license: "许可证",
+    licenseValue: "AGPL-3.0",
+    configPath: "配置文件",
   },
   data: {
     threatCategory: {
@@ -473,6 +476,7 @@ const zh = {
     ignoreFailed: "忽略威胁失败",
     unignoreFailed: "取消忽略失败",
     readFileFailed: "读取文件失败",
+    configSaveFailed: "保存配置失败",
   },
 } as const;
 
@@ -761,6 +765,7 @@ const en: StringTree<typeof zh> = {
     scan: "Scan",
     retention: "Result retention",
     retentionValue: "Keep latest scan only",
+    cveOnline: "Query CVEs online (OSV)",
     assets: "Asset management",
     confirmUpdate: "Confirm before update",
     confirmUninstall: "Confirm before uninstall",
@@ -768,6 +773,8 @@ const en: StringTree<typeof zh> = {
     about: "About",
     version: "Version",
     license: "License",
+    licenseValue: "AGPL-3.0",
+    configPath: "Config file",
   },
   data: {
     threatCategory: {
@@ -971,6 +978,7 @@ const en: StringTree<typeof zh> = {
     ignoreFailed: "Failed to ignore threat",
     unignoreFailed: "Failed to restore threat",
     readFileFailed: "Failed to read file",
+    configSaveFailed: "Failed to save configuration",
   },
 };
 

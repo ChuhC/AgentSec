@@ -19,6 +19,7 @@ from typing import Optional
 
 from .agent_manager import AgentManager
 from .asset_manager import AssetManager, AssetOperationError
+from . import config
 from .discovery.registry import discover_agent
 from .orchestrator import ScanOrchestrator
 from .paths import safe_normalize_readable_path
@@ -113,6 +114,10 @@ class IPCServer:
                 self._reply(req_id, self._threat_unignore(params))
             elif method == "file.read":
                 self._reply(req_id, self._file_read(params))
+            elif method == "config.get":
+                self._reply(req_id, self._config_get())
+            elif method == "config.patch":
+                self._reply(req_id, self._config_patch(params))
             else:
                 self._error(req_id, "未知方法: " + str(method), code="unknown_method")
         except AssetOperationError as exc:
@@ -127,8 +132,10 @@ class IPCServer:
             return
         scope = params.get("scope", "本机全部")
         scope_path = params.get("scopePath")
-        cve_online = params.get("cveOnline", True)
-        self._orchestrator = ScanOrchestrator(self.store, cve_online=cve_online)
+        cve_online = params.get("cveOnline")
+        if cve_online is None:
+            cve_online = config.cve_online()
+        self._orchestrator = ScanOrchestrator(self.store, cve_online=bool(cve_online))
         self._orchestrator._cancelled = False
 
         def run():
@@ -161,7 +168,9 @@ class IPCServer:
         if not agent_id:
             raise ValueError("缺少 agentId")
         scope_path = params.get("scopePath")
-        cve_online = params.get("cveOnline", True)
+        cve_online = params.get("cveOnline")
+        if cve_online is None:
+            cve_online = config.cve_online()
         force_update_check = params.get("forceUpdateCheck", True)
         agent, assets, status = discover_agent(
             agent_id,
@@ -259,6 +268,20 @@ class IPCServer:
         if truncated:
             content = content[:max_bytes]
         return {"path": norm, "content": content, "truncated": truncated}
+
+    def _config_get(self) -> dict:
+        cfg = config.get_config()
+        return {
+            "path": config.config_path(),
+            "config": cfg,
+        }
+
+    def _config_patch(self, params: dict) -> dict:
+        patch = params.get("patch") or params
+        if not isinstance(patch, dict):
+            raise ValueError("patch 须为对象")
+        saved = config.patch_config(patch)
+        return {"path": config.config_path(), "config": saved}
 
     # ---- 主循环 ----
 

@@ -1,7 +1,16 @@
 {
   "name": "agentsec-app",
   "version": "0.1.0",
-  "description": "AgentSec 桌面客户端（Electron + React + Vite + TS）",
+  "description": "AgentSec desktop client — local AI agent security scanner (Electron + React)",
+  "author": "ChuhC (https://github.com/ChuhC)",
+  "homepage": "https://github.com/ChuhC/AgentSec",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChuhC/AgentSec.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ChuhC/AgentSec/issues"
+  },
   "license": "AGPL-3.0",
   "private": true,
   "type": "module",

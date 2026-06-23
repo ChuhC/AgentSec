@@ -4,7 +4,7 @@
 真机解析（real-only）：各 Adapter 解析本机真实安装；无安装则该 Agent 不存在。
 
 家目录解析顺序（detect 时）：
-  1. 环境变量覆盖（AGENTSEC_<KIND>_HOME）——真机/测试指定
+  1. config.json agents.<kind>_home（或环境变量 AGENTSEC_<KIND>_HOME 覆盖）
   2. 自定义扫描根 scope_path 下的 .<kind> 目录
   3. 用户主目录 ~/.<kind>
 都不存在 → 该 Agent not_found（不展示 demo 数据）。
@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from typing import List, Optional, Tuple
 
+from ..config import get_agent_home
 from ..models import Agent, Asset
 
 
@@ -28,7 +29,7 @@ class AgentAdapter:
     def resolve_home(self) -> Optional[str]:
         """按优先级定位该 Agent 的配置家目录；都不存在返回 None。"""
         candidates: List[str] = []
-        env = os.environ.get(f"AGENTSEC_{self.kind.upper()}_HOME")
+        env = get_agent_home(self.kind)
         if env:
             candidates.append(env)
         if self.scope_path:

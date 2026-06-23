@@ -63,9 +63,11 @@ class AgentUpdateInfo:
 
 
 def _resolve_hermes_cli() -> Optional[str]:
-    cli = os.environ.get("AGENTSEC_HERMES_BIN")
-    if cli and os.path.isfile(cli):
-        return cli
+    from .config import get_agent_bin
+
+    configured = get_agent_bin("hermes")
+    if configured and os.path.isfile(configured):
+        return configured
     return shutil.which("hermes")
 
 

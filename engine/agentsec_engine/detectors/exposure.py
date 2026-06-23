@@ -290,9 +290,11 @@ class OpenClawAuditCollector:
         self.last_status = "not_run"
 
     def _resolve_bin(self) -> Optional[str]:
-        env = os.environ.get("AGENTSEC_OPENCLAW_BIN")
-        if env and os.path.isfile(env):
-            return env
+        from ..config import get_agent_bin
+
+        configured = get_agent_bin("openclaw")
+        if configured and os.path.isfile(configured):
+            return configured
         return shutil.which("openclaw")
 
     def collect(self, agent: Agent) -> List[ExposureFinding]:

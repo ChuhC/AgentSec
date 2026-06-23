@@ -1,14 +1,26 @@
 # AgentSec
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/ChuhC/AgentSec/releases)
 
 **Languages / 语言：** [English](README.en.md) · **简体中文**
 
 > 一键摸清本机 AI Agent 的安全底数 — 暴露面、组件 CVE、MCP / Skills 资产，全部在本地完成。
 
-AgentSec 是面向 macOS 的桌面安全工具，专为 **Hermes** 与 **OpenClaw** 设计。它不替代你的 Agent，而是在旁边做一轮「体检」：扫配置与技能里的风险、查依赖里的已知漏洞，并让你在同一界面里管理 MCP、Skills、知识库与组件 — **数据不出本机，无遥测，无账号**。
+**v0.1 初始预览** — 桌面壳、Hermes/OpenClaw 适配与规则库仍在快速迭代；API 与 UI 可能有破坏性变更，欢迎 Issue / PR 共建。
+
+AgentSec 是以 **macOS 为主平台** 的桌面安全工具，专为 **Hermes** 与 **OpenClaw** 设计。它不替代你的 Agent，而是在旁边做一轮「体检」：扫配置与技能里的风险、查依赖里的已知漏洞，并让你在同一界面里管理 MCP、Skills、知识库与组件 — **数据不出本机，无遥测，无账号**。
 
 ![扫描结果概览](docs/screenshots/zh/02-results.png)
+
+---
+
+## 平台支持
+
+| 平台 | 状态 | 说明 |
+|------|------|------|
+| **macOS** | ✅ 主要支持 | 日常开发与 `./scripts/package-dmg.sh` 发布 |
+| **Windows** | 🧪 实验性 | 提供 `package-win.ps1` 与路径抽象；扫描与适配**尚未完整验证**，欢迎实测反馈 |
 
 ---
 
@@ -31,7 +43,7 @@ AgentSec 是面向 macOS 的桌面安全工具，专为 **Hermes** 与 **OpenCla
 
 **资产发现与处置** — 通过 Hermes / OpenClaw 适配器解析本机 MCP、Skill、知识库及包管理依赖，形成按 Agent 分组的资产清单；支持组件更新、禁用与卸载，关键操作可配置二次确认。
 
-**权限态势评估** — 汇总 Agent 与挂载资产的权限声明，按文件、Shell、网络、工具、知识库等维度归一化，以雷达图对比多 Agent 权限暴露面，辅助识别高危能力组合。
+**权限态势评估** — 汇总 Agent 与挂载资产的权限声明，按文件、Shell、网络、工具、知识库等维度归一化；**权限矩阵**对比各组件能力覆盖，**雷达图**对比多 Agent 权限暴露面，辅助识别高危能力组合。
 
 **统一运营视图** — 全机安全评分、待处置项队列与分 Agent 工作台联动；在同一应用内完成威胁研判、漏洞跟踪与资产运维，无需在扫描器与配置工具之间切换。
 
@@ -41,7 +53,7 @@ AgentSec 是面向 macOS 的桌面安全工具，专为 **Hermes** 与 **OpenCla
 
 ## 快速开始
 
-环境：macOS · Node.js ≥ 18 · Python ≥ 3.10
+环境：**macOS** · Node.js ≥ 18 · Python ≥ 3.10
 
 ```bash
 cd engine && python3 -m venv .venv && source .venv/bin/activate && pip install -e .
@@ -50,11 +62,31 @@ cd ../app && npm install && npm run dev
 
 Electron 下载慢时可设：`ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"`
 
+<details>
+<summary>Windows 实验性开发（未完整验证）</summary>
+
+在 Windows PowerShell 中：
+
+```powershell
+cd engine
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e .
+cd ..\app
+npm install
+npm run dev
+```
+
+Hermes / OpenClaw 默认仍从 `%USERPROFILE%\.hermes` / `%USERPROFILE%\.openclaw` 发现；若路径或行为与 macOS 不一致，请提 Issue。
+</details>
+
 ---
 
 ## 打包发布
 
 **PyInstaller 冻结的 Python 引擎必须在目标操作系统上构建**（无法在 Mac 上直接产出可在 Windows 运行的 `.exe`）。Electron 前端可在各平台分别打包；推荐用仓库内一键脚本。
+
+> **macOS DMG 当前未做 Apple 代码签名。** 首次打开若被 Gatekeeper 拦截，请在「系统设置 → 隐私与安全性」中允许，或右键 App → 打开。
 
 ### macOS（DMG）
 
@@ -70,9 +102,9 @@ Electron 下载慢时可设：`ELECTRON_MIRROR="https://npmmirror.com/mirrors/el
 | `--skip-npm-install` | 跳过 `npm install` |
 
 产物：`app/release/AgentSec-*.dmg`  
-可选图标：`app/build/icon.icns`
+图标：`app/build/icon.icns`
 
-### Windows（NSIS 安装包）
+### Windows（NSIS 安装包 · 实验性）
 
 在 Windows 上打开 PowerShell（项目根目录）：
 
@@ -86,7 +118,7 @@ Electron 下载慢时可设：`ELECTRON_MIRROR="https://npmmirror.com/mirrors/el
 | `-SkipNpmInstall` | 跳过 `npm install` |
 
 产物：`app/release/AgentSec Setup *.exe`  
-可选图标：`app/build/icon.ico`
+Windows 图标 `app/build/icon.ico` 尚未随仓库提供，打包时将使用 electron-builder 默认图标。
 
 ### 手动分步（`app/` 目录）
 
@@ -103,21 +135,48 @@ npm run dist:win       # electron-builder → NSIS（在 Windows 上执行）
 
 ## 配置
 
-| 环境变量 | 说明 |
-|----------|------|
-| `AGENTSEC_DATA_DIR` | 数据目录（覆盖平台默认；打包态由 Electron 传入 `userData`） |
-| `AGENTSEC_ENGINE_DIR` | 开发态引擎源码目录（默认 `app/../engine`） |
-| `AGENTSEC_PYTHON` | 开发态 Python 解释器（默认 `engine/.venv` 内解释器） |
-| `AGENTSEC_DEBUG` | `1` 开启调试日志 |
+AgentSec 使用统一配置文件 **`config.json`**，与扫描快照、日志位于同一数据目录。设置页的选项会写入该文件；引擎与 Electron 主进程读取同一份配置。
 
-默认数据目录（未设置 `AGENTSEC_DATA_DIR` 时）：
+| 平台 | 默认路径 |
+|------|----------|
+| macOS | `~/Library/Application Support/AgentSec/config.json` |
+| Windows | `%APPDATA%\AgentSec\config.json` |
 
-| 平台 | 路径 |
-|------|------|
-| macOS | `~/Library/Application Support/AgentSec/` |
-| Windows | `%APPDATA%\AgentSec\` |
+完整字段示例见 [`docs/config.example.json`](docs/config.example.json)。主要节：
+
+| 节 | 说明 |
+|----|------|
+| `ui` | 语言、主题、资产操作确认（设置页可改） |
+| `scan` | `cve_online`：是否联网查询 OSV（设置页可改） |
+| `agents` | `hermes_home` / `openclaw_home` / `*_bin`：Agent 路径与 CLI |
+| `dev` | `debug`、`engine_dir`、`python`：开发调试 |
+
+**优先级：** 环境变量 > `config.json` > 内置默认。环境变量适合 CI 或临时覆盖；日常使用请改配置文件或设置页。
+
+| 环境变量 | 覆盖项 |
+|----------|--------|
+| `AGENTSEC_DATA_DIR` | 整个数据目录（含 config.json 位置） |
+| `AGENTSEC_*_HOME` / `AGENTSEC_*_BIN` | 对应 `agents.*` 字段 |
+| `AGENTSEC_CVE_OFFLINE` | 任意非空 → `scan.cve_online=false` |
+| `AGENTSEC_DEBUG` | `1` → `dev.debug=true` |
+| `AGENTSEC_ENGINE_DIR` / `AGENTSEC_PYTHON` | 开发态引擎路径 |
+
+> 旧版目录 `~/Library/Application Support/agentSec/`（小写）**不会自动迁移**；旧版 UI 设置若存于浏览器 localStorage，首次启动会自动合并进 `config.json`。
 
 更多设计说明见 [`docs/`](docs/)。
+
+---
+
+## 第三方组件
+
+| 组件 | 用途 | 说明 |
+|------|------|------|
+| [pyATR](https://pypi.org/project/pyatr/) | 暴露面规则检测 | 内置 ATR 规则包，离线匹配 |
+| [OSV](https://osv.dev/) | CVE 查询 | 联网查询依赖漏洞（可失败降级） |
+| [cvss](https://pypi.org/project/cvss/) | CVSS 解析 | 评分展示 |
+| OpenClaw 安全审计规则 | 暴露面补充 | 与 pyATR 并行，见 `engine/agentsec_engine/detectors/` |
+
+UI 栈：Electron · React · Vite · TypeScript。
 
 ---
 
@@ -125,6 +184,6 @@ npm run dist:win       # electron-builder → NSIS（在 Windows 上执行）
 
 欢迎 Issue / PR。UI 改动前建议：`cd app && npx tsc --noEmit`
 
-个人开发者作品，采用 [AGPL-3.0](LICENSE)。修改后若作为网络服务提供，须向用户公开对应源代码。
+Copyright © 2026 [ChuhC](https://github.com/ChuhC). 本项目采用 [AGPL-3.0](LICENSE) 许可。若你将修改版作为网络服务提供，须向用户提供对应源代码。
 
-安全问题请通过 GitHub Security Advisories 反馈。
+安全问题请阅读 [SECURITY.md](SECURITY.md)，通过 GitHub Security Advisories 私下反馈，勿公开 Issue 披露可利用漏洞。
