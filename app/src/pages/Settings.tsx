@@ -10,7 +10,7 @@ import {
 } from "../components/Icons";
 
 export function Settings() {
-  const { settings, setSettings, t } = useApp();
+  const { settings, setSettings, configPath, t } = useApp();
 
   return (
     <main className="main">
@@ -42,6 +42,11 @@ export function Settings() {
 
         <Group icon={<IconScan size={18} />} title={t("settings.scan")}>
           <InfoRow label={t("settings.retention")} value={t("settings.retentionValue")} />
+          <SwitchRow
+            label={t("settings.cveOnline")}
+            value={settings.cveOnline}
+            onChange={(v) => setSettings({ cveOnline: v })}
+          />
         </Group>
 
         <Group icon={<IconCube size={18} />} title={t("settings.assets")}>
@@ -64,7 +69,10 @@ export function Settings() {
 
         <Group icon={<IconAlert size={18} />} title={t("settings.about")}>
           <InfoRow label={t("settings.version")} value="0.1.0" />
-          <InfoRow label={t("settings.license")} value="Apache-2.0" />
+          <InfoRow label={t("settings.license")} value={t("settings.licenseValue")} />
+          {configPath && (
+            <InfoRow label={t("settings.configPath")} value={configPath} />
+          )}
         </Group>
       </div>
     </main>

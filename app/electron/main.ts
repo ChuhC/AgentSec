@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { spawn, ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { engineChildEnv, resolveEngine } from "./paths";
+import { engineChildEnv, isDebugEnabled, resolveEngine } from "./config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -22,8 +22,7 @@ let nextId = 1;
 let stdoutBuf = "";
 const pendingEvents: { event: string; data: any }[] = [];
 
-const DEBUG =
-  process.env.AGENTSEC_DEBUG === "1" || !!process.env["VITE_DEV_SERVER_URL"];
+const DEBUG = isDebugEnabled() || !!process.env["VITE_DEV_SERVER_URL"];
 
 function log(...args: unknown[]) {
   if (DEBUG) console.log("[main]", ...args);

@@ -16,8 +16,14 @@ import {
   type Locale,
   type LocaleDataLayer,
 } from "./i18n";
-import { applyTheme, type ThemeSetting } from "./theme";
+import { applyTheme } from "./theme";
 import { readScreenshotBootstrap } from "./screenshotBootstrap";
+import {
+  patchFromLegacySettings,
+  patchFromSettings,
+  settingsFromConfig,
+  type ConfigurableSettings,
+} from "./configBridge";
 
 const screenshotBoot = readScreenshotBootstrap();
 
@@ -60,13 +66,7 @@ export function resolveScanRoute(
   return { name: "scan-home" };
 }
 
-export interface Settings {
-  language: Locale;
-  theme: ThemeSetting;
-  confirmUpdate: boolean;
-  confirmUninstall: boolean;
-  confirmDisable: boolean;
-}
+export type Settings = ConfigurableSettings;
 
 interface AppState {
   route: Route;
@@ -76,6 +76,7 @@ interface AppState {
   progress: ProgressData | null;
   scanError: string | null;
   settings: Settings;
+  configPath: string | null;
   setSettings: (s: Partial<Settings>) => void;
   locale: Locale;
   t: ReturnType<typeof createT>;
@@ -106,36 +107,17 @@ const DEFAULT_SETTINGS: Settings = {
   confirmUpdate: true,
   confirmUninstall: true,
   confirmDisable: true,
+  cveOnline: true,
 };
 
-function loadSettings(): Settings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    const parsed = raw
-      ? (JSON.parse(raw) as Partial<Settings & { language: string; theme: string }>)
-      : {};
-    const merged = { ...DEFAULT_SETTINGS, ...parsed, ...screenshotBoot?.settings };
-    return {
-      ...merged,
-      language: localeFromSetting(String(merged.language ?? "zh")),
-      theme: themeFromSetting(String(merged.theme ?? "glass")),
-    };
-  } catch {
-    const merged = { ...DEFAULT_SETTINGS, ...(screenshotBoot?.settings ?? {}) };
-    return {
-      ...merged,
-      language: localeFromSetting(String(merged.language ?? "zh")),
-      theme: themeFromSetting(String(merged.theme ?? "glass")),
-    };
-  }
-}
-
-function persistSettings(settings: Settings) {
-  try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  } catch {
-    /* ignore quota errors */
-  }
+function bootstrapSettings(): Settings {
+  const merged = { ...DEFAULT_SETTINGS, ...(screenshotBoot?.settings ?? {}) };
+  return {
+    ...merged,
+    language: localeFromSetting(String(merged.language ?? "zh")),
+    theme: themeFromSetting(String(merged.theme ?? "glass")),
+    cveOnline: merged.cveOnline !== false,
+  };
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -147,7 +129,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
-  const [settings, setSettingsState] = useState<Settings>(loadSettings);
+  const [settings, setSettingsState] = useState<Settings>(bootstrapSettings);
+  const [configPath, setConfigPath] = useState<string | null>(null);
   const locale = settings.language;
   const t = useMemo(() => createT(locale), [locale]);
   const layer = useMemo(() => buildLocaleLayer(locale, t), [locale, t]);
@@ -161,10 +144,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setSettings = useCallback((s: Partial<Settings>) => {
     setSettingsState((prev) => {
       const next = { ...prev, ...s };
-      persistSettings(next);
+      const patch = patchFromSettings(s);
+      if (Object.keys(patch).length) {
+        window.agentsec
+          ?.request("config.patch", { patch })
+          .catch((e: any) => setLastError(e?.message || t("errors.configSaveFailed")));
+      }
       return next;
     });
-  }, []);
+  }, [t]);
 
   useEffect(() => applyTheme(settings.theme), [settings.theme]);
 
@@ -172,6 +160,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.lang = locale === "en" ? "en" : "zh-CN";
   }, [locale]);
   const clearError = useCallback(() => setLastError(null), []);
+
+  // 从 config.json 加载设置（并迁移旧 localStorage）
+  useEffect(() => {
+    window.agentsec
+      ?.request("config.get")
+      .then(async (res) => {
+        if (res?.path) setConfigPath(res.path as string);
+        let next = settingsFromConfig((res?.config as Record<string, unknown>) ?? {});
+        if (screenshotBoot?.settings) {
+          const boot = screenshotBoot.settings as Partial<Settings>;
+          next = {
+            ...next,
+            ...boot,
+            language: localeFromSetting(String(boot.language ?? next.language)),
+            theme: themeFromSetting(String(boot.theme ?? next.theme)),
+          };
+        }
+        try {
+          const raw = localStorage.getItem(SETTINGS_KEY);
+          if (raw) {
+            const legacy = JSON.parse(raw) as Record<string, unknown>;
+            const legacyPatch = patchFromLegacySettings(legacy);
+            if (Object.keys(legacyPatch).length) {
+              const patched = await window.agentsec!.request("config.patch", { patch: legacyPatch });
+              if (patched?.path) setConfigPath(patched.path as string);
+              next = settingsFromConfig((patched?.config as Record<string, unknown>) ?? {});
+            }
+            localStorage.removeItem(SETTINGS_KEY);
+          }
+        } catch {
+          /* ignore legacy parse errors */
+        }
+        setSettingsState(next);
+      })
+      .catch(() => {});
+  }, []);
 
   // 启动时读取上次快照（NF-D1：重启可查看）
   useEffect(() => {
@@ -359,6 +383,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       progress,
       scanError,
       settings,
+      configPath,
       setSettings,
       locale,
       t,
@@ -378,7 +403,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       lastError,
       clearError,
     }),
-    [route, snapshot, scanState, progress, scanError, settings, locale, t, layer, lastError, refreshAgentAssets, updateAgent, fetchAgentRuntime, ignoreThreat, unignoreThreat, readFile]
+    [route, snapshot, scanState, progress, scanError, settings, configPath, locale, t, layer, lastError, refreshAgentAssets, updateAgent, fetchAgentRuntime, ignoreThreat, unignoreThreat, readFile]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
