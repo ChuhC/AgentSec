@@ -101,6 +101,12 @@ const Ctx = createContext<AppState | null>(null);
 
 const SETTINGS_KEY = "agentsec.settings";
 
+function requireAgentsec() {
+  const bridge = window.agentsec;
+  if (!bridge) throw new Error("AgentSec bridge is not available");
+  return bridge;
+}
+
 const DEFAULT_SETTINGS: Settings = {
   language: "zh",
   theme: "glass",
@@ -272,7 +278,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     navAfterScan.current = true;
     setRoute({ name: "scanning" });
     try {
-      await window.agentsec.request("scan.start", { scope, scopePath });
+      await requireAgentsec().request("scan.start", { scope, scopePath });
     } catch (e: any) {
       setScanState("error");
       setScanError(e?.message || t("errors.scanStartFailed"));
@@ -289,7 +295,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setRoute(hasSnap ? { name: "results" } : { name: "scan-home" });
     }, 8000);
     try {
-      await window.agentsec.request("scan.cancel");
+      await requireAgentsec().request("scan.cancel");
     } catch (e: any) {
       window.clearTimeout(fallback);
       setScanState("scanning");
@@ -300,7 +306,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const doAssetOp = useCallback(
     async (method: string, id: string) => {
       try {
-        const res = await window.agentsec.request(method, { assetId: id });
+        const res = await requireAgentsec().request(method, { assetId: id });
         if (res?.snapshot) setSnapshot(res.snapshot);
       } catch (e: any) {
         setLastError(e?.message || t("errors.opFailed"));
@@ -311,7 +317,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const refreshAgentAssets = useCallback(async (agentId: string): Promise<ScanSnapshot | null> => {
     try {
-      const res = await window.agentsec.request("agent.refresh", {
+      const res = await requireAgentsec().request("agent.refresh", {
         agentId,
         forceUpdateCheck: true,
       });
@@ -328,7 +334,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateAgent = useCallback(async (agentId: string) => {
     try {
-      const res = await window.agentsec.request("agent.update", { agentId });
+      const res = await requireAgentsec().request("agent.update", { agentId });
       if (res?.snapshot) setSnapshot(res.snapshot);
     } catch (e: any) {
       setLastError(e?.message || t("errors.updateAgentFailed"));
@@ -338,7 +344,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const fetchAgentRuntime = useCallback(async (agentId: string) => {
     try {
-      const res = await window.agentsec.request("agent.runtime.get", { agentId });
+      const res = await requireAgentsec().request("agent.runtime.get", { agentId });
       return (res?.runtime as AgentRuntime) ?? null;
     } catch (e: any) {
       setLastError(e?.message || t("errors.runtimeFailed"));
@@ -348,7 +354,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const ignoreThreat = useCallback(async (findingKey: string) => {
     try {
-      const res = await window.agentsec.request("threat.ignore", { findingKey });
+      const res = await requireAgentsec().request("threat.ignore", { findingKey });
       if (res?.snapshot) setSnapshot(res.snapshot);
     } catch (e: any) {
       setLastError(e?.message || t("errors.ignoreFailed"));
@@ -357,7 +363,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const unignoreThreat = useCallback(async (findingKey: string) => {
     try {
-      const res = await window.agentsec.request("threat.unignore", { findingKey });
+      const res = await requireAgentsec().request("threat.unignore", { findingKey });
       if (res?.snapshot) setSnapshot(res.snapshot);
     } catch (e: any) {
       setLastError(e?.message || t("errors.unignoreFailed"));
@@ -366,7 +372,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const readFile = useCallback(async (path: string) => {
     try {
-      const res = await window.agentsec.request("file.read", { path });
+      const res = await requireAgentsec().request("file.read", { path });
       return res as { path: string; content: string; truncated: boolean };
     } catch (e: any) {
       setLastError(e?.message || t("errors.readFileFailed"));

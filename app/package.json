@@ -73,6 +73,7 @@
     },
     "win": {
       "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-${arch}-setup.${ext}",
       "target": [
         "nsis"
       ]
