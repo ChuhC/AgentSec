@@ -44,14 +44,7 @@ echo "    根目录: $ROOT"
 command -v node >/dev/null || { echo "错误: 未找到 node" >&2; exit 1; }
 command -v npm >/dev/null || { echo "错误: 未找到 npm" >&2; exit 1; }
 
-if [[ ! -d "$VENV" ]]; then
-  echo "==> 创建 Python 虚拟环境 ($VENV)"
-  python3 -m venv "$VENV"
-fi
-
-echo "==> 安装/更新引擎依赖"
-"$VENV/bin/pip" install -q -e "$ENGINE"
-"$VENV/bin/pip" install -q pyinstaller
+"$ROOT/scripts/setup-engine.sh" --with-pyinstaller
 
 if [[ "$SKIP_NPM_INSTALL" -eq 0 ]]; then
   echo "==> npm install (app/)"
