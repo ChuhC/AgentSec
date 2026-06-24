@@ -54,8 +54,8 @@ jobs:
 
       - name: Package DMG
         env:
-          # We upload artifacts in a separate publish job; do not auto-publish via electron-builder.
           EPUBLISH: never
+          CSC_IDENTITY_AUTO_DISCOVERY: false
           AGENTSEC_MAC_ARCH: ${{ matrix.arch }}
         run: ./scripts/package-dmg.sh --arch ${{ matrix.arch }}
 
