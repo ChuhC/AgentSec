@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3" /></a>
-  <a href="https://github.com/ChuhC/AgentSec/releases"><img src="https://img.shields.io/badge/version-0.1.0-orange.svg" alt="v0.1.0" /></a>
+  <a href="https://github.com/ChuhC/AgentSec/releases"><img src="https://img.shields.io/badge/version-0.1.1-orange.svg" alt="v0.1.1" /></a>
   <a href="https://github.com/ChuhC/AgentSec"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20(实验性)-lightgrey" alt="Platform" /></a>
 </p>
 
