@@ -70,6 +70,7 @@ export function App() {
 
   return (
     <div className="app">
+      <div className="titlebar-drag" aria-hidden="true" />
       <Sidebar />
       {page}
       {lastError && (

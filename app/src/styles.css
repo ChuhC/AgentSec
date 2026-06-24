@@ -1,4 +1,7 @@
 :root {
+  --titlebar-height: 32px;
+  --titlebar-controls-width: 138px;
+
   /* 背景层 */
   --bg-0: #0a0612;
   --bg-1: #100a1e;
@@ -390,6 +393,31 @@ html:not([data-theme]) {
   color-scheme: dark;
 }
 
+.titlebar-drag {
+  display: none;
+}
+
+html[data-platform="win32"] .titlebar-drag {
+  display: block;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: var(--titlebar-controls-width);
+  height: var(--titlebar-height);
+  z-index: 1000;
+  -webkit-app-region: drag;
+}
+
+html[data-platform="win32"] button,
+html[data-platform="win32"] input,
+html[data-platform="win32"] select,
+html[data-platform="win32"] textarea,
+html[data-platform="win32"] a,
+html[data-platform="win32"] .nav-item,
+html[data-platform="win32"] .modal-close {
+  -webkit-app-region: no-drag;
+}
+
 .app {
   display: flex;
   height: 100vh;
@@ -412,7 +440,11 @@ html:not([data-theme]) {
   display: flex;
   flex-direction: column;
   padding: 14px 14px 16px;
-  padding-top: 44px; /* 留出红绿灯 */
+  padding-top: 44px; /* macOS 留出红绿灯 */
+}
+
+html[data-platform="win32"] .sidebar {
+  padding-top: 14px;
 }
 
 .brand {
