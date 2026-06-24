@@ -43,6 +43,7 @@
     "appId": "dev.agentsec.app",
     "productName": "AgentSec",
     "icon": "build/icon.icns",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
       "output": "release",
       "buildResources": "build"
