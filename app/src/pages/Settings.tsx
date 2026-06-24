@@ -38,6 +38,13 @@ export function Settings() {
             ]}
             onChange={(v) => setSettings({ theme: v as ThemeSetting })}
           />
+          {configPath && (
+            <InfoRow
+              label={t("settings.configPath")}
+              value={configPath}
+              breakAll
+            />
+          )}
         </Group>
 
         <Group icon={<IconScan size={18} />} title={t("settings.scan")}>
@@ -70,9 +77,6 @@ export function Settings() {
         <Group icon={<IconAlert size={18} />} title={t("settings.about")}>
           <InfoRow label={t("settings.version")} value="0.1.0" />
           <InfoRow label={t("settings.license")} value={t("settings.licenseValue")} />
-          {configPath && (
-            <InfoRow label={t("settings.configPath")} value={configPath} />
-          )}
         </Group>
       </div>
     </main>
@@ -166,13 +170,26 @@ function SwitchRow({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function InfoRow({
+  label,
+  value,
+  breakAll,
+}: {
+  label: string;
+  value: string;
+  breakAll?: boolean;
+}) {
   return (
-    <div className="row">
-      <span className="muted" style={{ width: 110, fontSize: 13.5 }}>
+    <div className="row" style={{ alignItems: breakAll ? "flex-start" : undefined }}>
+      <span className="muted" style={{ width: 110, fontSize: 13.5, flexShrink: 0 }}>
         {label}
       </span>
-      <span style={{ fontSize: 13.5 }}>{value}</span>
+      <span
+        className={breakAll ? "settings-config-path" : undefined}
+        style={{ fontSize: 13.5 }}
+      >
+        {value}
+      </span>
     </div>
   );
 }

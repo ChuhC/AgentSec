@@ -162,7 +162,19 @@ html[data-theme="light"] .select-input {
 }
 
 html[data-theme="light"] .switch {
-  background: rgba(0, 0, 0, 0.12);
+  background: #c4cad4;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .switch::after {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+}
+
+html[data-theme="light"] .switch.on {
+  background: linear-gradient(135deg, var(--purple), var(--purple-2));
+  border-color: rgba(124, 58, 237, 0.45);
+  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.15);
 }
 
 html[data-theme="light"] .tab.active {
@@ -1113,6 +1125,16 @@ html:not([data-theme]) {
 }
 .switch.on::after {
   left: 21px;
+}
+
+.settings-config-path {
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12.5px !important;
+  line-height: 1.45;
+  color: var(--text-2);
 }
 
 /* 结果页 */
