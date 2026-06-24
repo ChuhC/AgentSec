@@ -87,6 +87,7 @@ jobs:
         shell: pwsh
         env:
           EPUBLISH: never
+          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: .\scripts\package-win.ps1
 
       - uses: actions/upload-artifact@v4
