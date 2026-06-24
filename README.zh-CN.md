@@ -60,23 +60,53 @@ AgentSec 是以 **macOS 为主平台** 的桌面安全工具，专为 **Hermes**
 
 ## 快速开始
 
-环境：**macOS** · Node.js ≥ 18 · Python ≥ 3.10
+### 安装使用（推荐）
+
+从 [GitHub Releases](https://github.com/ChuhC/AgentSec/releases) 下载对应平台的安装包 — **无需安装 Node.js 或 Python**。
+
+| 平台 | 下载 | 说明 |
+|------|------|------|
+| **macOS** | `AgentSec-*.dmg` | 打开 DMG，将 **AgentSec** 拖入「应用程序」 |
+| **Windows** | `AgentSec Setup *.exe` | **实验性** — 扫描能力尚未完整验证 |
+
+> **macOS DMG 当前未做 Apple 代码签名。** 首次打开若被 Gatekeeper 拦截，请在「系统设置 → 隐私与安全性」中允许，或右键 App → **打开**。
+
+安装后启动 AgentSec，在首页发起扫描即可。扫描结果与偏好设置保存在本机（macOS：`~/Library/Application Support/AgentSec/`）；语言、主题、CVE 联网等可在应用内 **设置** 中调整。
+
+### 从源码开发
+
+面向贡献者或需要测试未发布版本的情况。需要 **Node.js ≥ 18** 与 **Python ≥ 3.10**。
+
+AgentSec 是**两部分**：`engine/` 为 Python 扫描引擎；`app/` 为 Electron 桌面壳。开发模式下壳进程会自动拉起 `engine/.venv` 里的引擎。
+
+以下命令均在**仓库根目录**执行。
+
+#### macOS
+
+> macOS 自带的 `python3` 是 **3.8**，版本不够。若 `engine/.venv` 已用 3.11 建好，再执行 `python3 -m venv .venv` 会报 `ensurepip` 错误。
 
 ```bash
-cd engine && python3 -m venv .venv && source .venv/bin/activate && pip install -e .
-cd ../app && npm install && npm run dev
+./scripts/setup-engine.sh   # 一次性：创建 engine/.venv 并安装依赖
+./scripts/run-dev.sh        # 启动 Electron 开发模式（热更新）
 ```
 
-Electron 下载慢时可设：`ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"`
+若已有可用的 `engine/.venv`（Python 3.10+），直接 `./scripts/run-dev.sh` 即可。
 
-<details>
-<summary>Windows 实验性开发（未完整验证）</summary>
+Electron 下载慢时可设：
 
-在 Windows PowerShell 中：
+```bash
+export ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+```
+
+#### Windows（实验性）
+
+Windows 上的扫描与打包**尚未完整验证**，欢迎通过 Issue 反馈。
+
+在 **PowerShell** 中（需 Python 3.10+ 在 `PATH` 中；若 `python` 版本过旧，可改用 `py -3.11`）：
 
 ```powershell
 cd engine
-python -m venv .venv
+python -m venv .venv    # 若重建失败，请先删除 .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e .
 cd ..\app
@@ -84,20 +114,19 @@ npm install
 npm run dev
 ```
 
-Hermes / OpenClaw 默认仍从 `%USERPROFILE%\.hermes` / `%USERPROFILE%\.openclaw` 发现；若路径或行为与 macOS 不一致，请提 Issue。
-</details>
+Hermes / OpenClaw 默认从 `%USERPROFILE%\.hermes` / `%USERPROFILE%\.openclaw` 发现；若路径或行为与 macOS 不一致，请提 Issue。
 
----
+Electron 下载慢时可设：
 
-## 打包发布
+```powershell
+$env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
+```
+
+#### 打包发布
 
 **PyInstaller 冻结的 Python 引擎必须在目标操作系统上构建**（无法在 Mac 上直接产出可在 Windows 运行的 `.exe`）。Electron 前端可在各平台分别打包；推荐用仓库内一键脚本。
 
-> **macOS DMG 当前未做 Apple 代码签名。** 首次打开若被 Gatekeeper 拦截，请在「系统设置 → 隐私与安全性」中允许，或右键 App → 打开。
-
-### macOS（DMG）
-
-在 macOS 上执行：
+**macOS（DMG）** — 在 macOS 上执行：
 
 ```bash
 ./scripts/package-dmg.sh
@@ -108,12 +137,9 @@ Hermes / OpenClaw 默认仍从 `%USERPROFILE%\.hermes` / `%USERPROFILE%\.opencla
 | `--skip-engine` | 跳过 PyInstaller（引擎未改时可加速） |
 | `--skip-npm-install` | 跳过 `npm install` |
 
-产物：`app/release/AgentSec-*.dmg`  
-图标：`app/build/icon.icns`
+产物：`app/release/AgentSec-*.dmg` · 图标：`app/build/icon.icns`
 
-### Windows（NSIS 安装包 · 实验性）
-
-在 Windows 上打开 PowerShell（项目根目录）：
+**Windows（NSIS · 实验性）** — 在 Windows PowerShell（项目根目录）：
 
 ```powershell
 .\scripts\package-win.ps1
@@ -124,10 +150,9 @@ Hermes / OpenClaw 默认仍从 `%USERPROFILE%\.hermes` / `%USERPROFILE%\.opencla
 | `-SkipEngine` | 跳过 PyInstaller |
 | `-SkipNpmInstall` | 跳过 `npm install` |
 
-产物：`app/release/AgentSec Setup *.exe`  
-Windows 图标 `app/build/icon.ico` 尚未随仓库提供，打包时将使用 electron-builder 默认图标。
+产物：`app/release/AgentSec Setup *.exe`（`app/build/icon.ico` 尚未随仓库提供，将使用 electron-builder 默认图标）
 
-### 手动分步（`app/` 目录）
+**手动分步**（在 `app/` 目录）：
 
 ```bash
 npm run build:engine   # 调用 ../scripts/build-engine.cjs，须在对应 OS 上执行
@@ -137,40 +162,6 @@ npm run dist:win       # electron-builder → NSIS（在 Windows 上执行）
 ```
 
 国内网络可设：`ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"`
-
----
-
-## 配置
-
-AgentSec 使用统一配置文件 **`config.json`**，与扫描快照、日志位于同一数据目录。设置页的选项会写入该文件；引擎与 Electron 主进程读取同一份配置。
-
-| 平台 | 默认路径 |
-|------|----------|
-| macOS | `~/Library/Application Support/AgentSec/config.json` |
-| Windows | `%APPDATA%\AgentSec\config.json` |
-
-完整字段示例见 [`docs/config.example.json`](docs/config.example.json)。主要节：
-
-| 节 | 说明 |
-|----|------|
-| `ui` | 语言、主题、资产操作确认（设置页可改） |
-| `scan` | `cve_online`：是否联网查询 OSV（设置页可改） |
-| `agents` | `hermes_home` / `openclaw_home` / `*_bin`：Agent 路径与 CLI |
-| `dev` | `debug`、`engine_dir`、`python`：开发调试 |
-
-**优先级：** 环境变量 > `config.json` > 内置默认。环境变量适合 CI 或临时覆盖；日常使用请改配置文件或设置页。
-
-| 环境变量 | 覆盖项 |
-|----------|--------|
-| `AGENTSEC_DATA_DIR` | 整个数据目录（含 config.json 位置） |
-| `AGENTSEC_*_HOME` / `AGENTSEC_*_BIN` | 对应 `agents.*` 字段 |
-| `AGENTSEC_CVE_OFFLINE` | 任意非空 → `scan.cve_online=false` |
-| `AGENTSEC_DEBUG` | `1` → `dev.debug=true` |
-| `AGENTSEC_ENGINE_DIR` / `AGENTSEC_PYTHON` | 开发态引擎路径 |
-
-> 旧版目录 `~/Library/Application Support/agentSec/`（小写）**不会自动迁移**；旧版 UI 设置若存于浏览器 localStorage，首次启动会自动合并进 `config.json`。
-
-更多设计说明见 [`docs/`](docs/)。
 
 ---
 

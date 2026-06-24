@@ -60,23 +60,53 @@ AgentSec is a **macOS-first desktop security scanner** built for **Hermes** and 
 
 ## Quick start
 
-Requires **macOS** · Node.js ≥ 18 · Python ≥ 3.10
+### Install (recommended)
+
+Download the latest release for your platform — **no Node.js or Python required**.
+
+| Platform | Download | Notes |
+|----------|----------|-------|
+| **macOS** | [GitHub Releases](https://github.com/ChuhC/AgentSec/releases) → `AgentSec-*.dmg` | Open the DMG and drag **AgentSec** to Applications |
+| **Windows** | Same page → `AgentSec Setup *.exe` | **Experimental** — scanning not fully validated |
+
+> **macOS DMG builds are currently unsigned.** If Gatekeeper blocks the app, allow it under **System Settings → Privacy & Security**, or right-click the app → **Open**.
+
+After install, launch AgentSec and run a scan from the home screen. Results and preferences are stored locally (macOS: `~/Library/Application Support/AgentSec/`). Language, theme, CVE lookup, and other options are in the in-app **Settings** page.
+
+### Development (from source)
+
+For contributors or testing unreleased changes. Requires **Node.js ≥ 18** and **Python ≥ 3.10**.
+
+AgentSec is **two parts**: `engine/` is the Python scan backend; `app/` is the Electron desktop shell. In dev mode the shell spawns the engine from `engine/.venv`.
+
+Run commands from the **repository root**.
+
+#### macOS
+
+> macOS ships with `python3` **3.8**, which is too old. Do **not** run `python3 -m venv` inside `engine/` if you already have an `engine/.venv` built with 3.11 — that triggers `ensurepip` errors.
 
 ```bash
-cd engine && python3 -m venv .venv && source .venv/bin/activate && pip install -e .
-cd ../app && npm install && npm run dev
+./scripts/setup-engine.sh   # once: Python venv + engine deps
+./scripts/run-dev.sh        # Electron dev (hot reload)
 ```
 
-Slow Electron downloads: `ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"`
+If `engine/.venv` already exists with Python 3.10+, skip straight to `./scripts/run-dev.sh`.
 
-<details>
-<summary>Windows experimental dev (not fully validated)</summary>
+Slow Electron downloads:
 
-In Windows PowerShell:
+```bash
+export ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+```
+
+#### Windows (experimental)
+
+Scanning and packaging on Windows are **not fully validated** — feedback welcome via Issues.
+
+In **PowerShell** (Python 3.10+ on `PATH`; use `py -3.11` if `python` points to an older version):
 
 ```powershell
 cd engine
-python -m venv .venv
+python -m venv .venv    # remove .venv first if recreate fails
 .\.venv\Scripts\Activate.ps1
 pip install -e .
 cd ..\app
@@ -84,20 +114,19 @@ npm install
 npm run dev
 ```
 
-Discovery still defaults to `%USERPROFILE%\.hermes` and `%USERPROFILE%\.openclaw`. Report Issues if paths or behavior differ from macOS.
-</details>
+Discovery defaults to `%USERPROFILE%\.hermes` and `%USERPROFILE%\.openclaw`. Report Issues if paths or behavior differ from macOS.
 
----
+Slow Electron downloads:
 
-## Building releases
+```powershell
+$env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"
+```
+
+#### Building releases
 
 The **PyInstaller-frozen Python engine must be built on the target OS** (you cannot produce a runnable Windows `.exe` engine from macOS alone). Package the Electron shell on each platform separately; use the repo scripts below.
 
-> **macOS DMG builds are currently unsigned.** If Gatekeeper blocks the app, allow it under System Settings → Privacy & Security, or right-click the app → Open.
-
-### macOS (DMG)
-
-On macOS:
+**macOS (DMG)** — on macOS:
 
 ```bash
 ./scripts/package-dmg.sh
@@ -108,12 +137,9 @@ On macOS:
 | `--skip-engine` | Skip PyInstaller (faster when the engine unchanged) |
 | `--skip-npm-install` | Skip `npm install` |
 
-Output: `app/release/AgentSec-*.dmg`  
-Icon: `app/build/icon.icns`
+Output: `app/release/AgentSec-*.dmg` · icon: `app/build/icon.icns`
 
-### Windows (NSIS installer · experimental)
-
-In PowerShell from the repo root on Windows:
+**Windows (NSIS · experimental)** — PowerShell from the repo root on Windows:
 
 ```powershell
 .\scripts\package-win.ps1
@@ -124,10 +150,9 @@ In PowerShell from the repo root on Windows:
 | `-SkipEngine` | Skip PyInstaller |
 | `-SkipNpmInstall` | Skip `npm install` |
 
-Output: `app/release/AgentSec Setup *.exe`  
-`app/build/icon.ico` is not shipped yet; Windows builds fall back to the electron-builder default icon.
+Output: `app/release/AgentSec Setup *.exe` (`app/build/icon.ico` is not shipped yet; falls back to the electron-builder default icon)
 
-### Manual steps (from `app/`)
+**Manual steps** (from `app/`):
 
 ```bash
 npm run build:engine   # runs ../scripts/build-engine.cjs on the current OS
@@ -138,40 +163,6 @@ npm run dist:win       # electron-builder → NSIS (run on Windows)
 
 Mirror for electron-builder binaries (optional):  
 `ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"`
-
----
-
-## Configuration
-
-AgentSec uses a single **`config.json`** alongside scan snapshots and logs. Settings in the app UI are persisted there; the Electron shell and Python engine read the same file.
-
-| Platform | Default path |
-|----------|--------------|
-| macOS | `~/Library/Application Support/AgentSec/config.json` |
-| Windows | `%APPDATA%\AgentSec\config.json` |
-
-See [`docs/config.example.json`](docs/config.example.json) for all fields:
-
-| Section | Purpose |
-|---------|---------|
-| `ui` | Language, theme, asset confirmation gates (editable in Settings) |
-| `scan` | `cve_online`: query OSV over the network (editable in Settings) |
-| `agents` | `hermes_home` / `openclaw_home` / `*_bin`: agent paths and CLIs |
-| `dev` | `debug`, `engine_dir`, `python`: development overrides |
-
-**Precedence:** environment variables > `config.json` > built-in defaults. Use env vars for CI or temporary overrides; prefer the config file or Settings UI for day-to-day use.
-
-| Variable | Overrides |
-|----------|-----------|
-| `AGENTSEC_DATA_DIR` | Entire data directory (including config location) |
-| `AGENTSEC_*_HOME` / `AGENTSEC_*_BIN` | Matching `agents.*` fields |
-| `AGENTSEC_CVE_OFFLINE` | Any non-empty value → `scan.cve_online=false` |
-| `AGENTSEC_DEBUG` | `1` → `dev.debug=true` |
-| `AGENTSEC_ENGINE_DIR` / `AGENTSEC_PYTHON` | Dev engine paths |
-
-> Legacy data under `~/Library/Application Support/agentSec/` (lowercase) is **not migrated automatically**. Legacy UI settings in browser localStorage are merged into `config.json` on first launch.
-
-Further docs in [`docs/`](docs/).
 
 ---
 
