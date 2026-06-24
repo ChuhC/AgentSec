@@ -1,9 +1,16 @@
-# AgentSec
+<h1 align="center">🛡️ AgentSec — 本机 AI Agent 安全扫描器</h1>
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/ChuhC/AgentSec/releases)
+<p align="center">
+  <img src="app/build/icon.png" alt="AgentSec" width="128" />
+</p>
 
-**Language / 语言：** [English](README.md) · **简体中文**
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3" /></a>
+  <a href="https://github.com/ChuhC/AgentSec/releases"><img src="https://img.shields.io/badge/version-0.1.0-orange.svg" alt="v0.1.0" /></a>
+  <a href="https://github.com/ChuhC/AgentSec"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20(实验性)-lightgrey" alt="Platform" /></a>
+</p>
+
+<p align="center"><strong>Language / 语言：</strong> <a href="README.md">English</a> · <strong>简体中文</strong></p>
 
 > 一键扫描本机 AI Agent：暴露面、组件 CVE、MCP / Skills 资产。
 
