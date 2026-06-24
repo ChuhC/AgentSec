@@ -20,10 +20,10 @@ $SetupScript = Join-Path $Root "scripts\setup-engine.ps1"
 function Invoke-NpmStep {
     param(
         [string]$Label,
-        [string[]]$Args
+        [string[]]$NpmArguments
     )
     Write-Host "==> $Label"
-    & npm @Args
+    & npm @NpmArguments
     if ($LASTEXITCODE -ne 0) {
         throw "$Label failed with exit code $LASTEXITCODE"
     }
