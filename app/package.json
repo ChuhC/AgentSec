@@ -21,8 +21,8 @@
     "preview": "vite preview",
     "screenshots": "node scripts/capture-readme-screenshots.mjs",
     "build:engine": "node ../scripts/build-engine.cjs",
-    "dist:mac": "electron-builder --mac dmg",
-    "dist:win": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac dmg --publish never",
+    "dist:win": "electron-builder --win nsis --publish never",
     "dist": "npm run dist:mac"
   },
   "devDependencies": {
@@ -74,6 +74,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "publish": null
   }
 }
