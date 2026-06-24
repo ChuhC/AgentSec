@@ -44,6 +44,7 @@
     "productName": "AgentSec",
     "icon": "build/icon.icns",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "generateUpdatesFilesForAllChannels": false,
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -61,10 +62,14 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "build/icon.icns",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "target": [
         "dmg"
       ],
       "identity": null
+    },
+    "dmg": {
+      "writeUpdateInfo": false
     },
     "win": {
       "icon": "build/icon.png",

@@ -57,10 +57,9 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-export ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}"
-export ELECTRON_BUILDER_BINARIES_MIRROR="${ELECTRON_BUILDER_BINARIES_MIRROR:-https://npmmirror.com/mirrors/electron-builder-binaries/}"
-if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
-  unset ELECTRON_MIRROR ELECTRON_BUILDER_BINARIES_MIRROR
+if [[ -z "${GITHUB_ACTIONS:-}" ]]; then
+  export ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}"
+  export ELECTRON_BUILDER_BINARIES_MIRROR="${ELECTRON_BUILDER_BINARIES_MIRROR:-https://npmmirror.com/mirrors/electron-builder-binaries/}"
 fi
 
 echo "==> agentSec macOS DMG packaging ($MAC_ARCH)"
@@ -96,23 +95,67 @@ else
   fi
 fi
 
+engine_kind="$(file "$ENGINE_BIN" 2>/dev/null || true)"
+echo "==> Engine binary: $engine_kind"
+if [[ "$MAC_ARCH" == "x64" && "$engine_kind" != *x86_64* ]]; then
+  echo "Error: expected x86_64 engine binary for x64 DMG" >&2
+  exit 1
+fi
+if [[ "$MAC_ARCH" == "arm64" && "$engine_kind" == *x86_64* && "$(uname -m)" == "arm64" ]]; then
+  echo "Error: expected arm64 engine binary for arm64 DMG" >&2
+  exit 1
+fi
+
 echo "==> Building frontend + Electron main process"
 npm run build
 
 echo "==> electron-builder (dmg, $MAC_ARCH)"
+set +e
 npm run dist:mac -- --"$MAC_ARCH"
+eb_ec=$?
+set -e
 
-shopt -s nullglob
-dmg_candidates=("$APP/release/"*-"$MAC_ARCH".dmg)
-shopt -u nullglob
+find_dmg() {
+  shopt -s nullglob
+  local named=("$APP/release/"*-"$MAC_ARCH".dmg)
+  local all=("$APP/release/"*.dmg)
+  shopt -u nullglob
+  local pick=()
 
-if [[ ${#dmg_candidates[@]} -eq 0 ]]; then
-  echo "Error: no *-${MAC_ARCH}.dmg found under $APP/release" >&2
+  if [[ ${#named[@]} -gt 0 ]]; then
+    pick=("${named[@]}")
+  else
+    local f
+    for f in "${all[@]}"; do
+      [[ "$f" == *.blockmap ]] && continue
+      case "$MAC_ARCH" in
+        arm64) [[ "$f" == *arm64* ]] && pick+=("$f") ;;
+        x64)   [[ "$f" != *arm64* ]] && pick+=("$f") ;;
+      esac
+    done
+  fi
+
+  if [[ ${#pick[@]} -eq 0 ]]; then
+    return 1
+  fi
+  ls -t "${pick[@]}" | head -1
+}
+
+if ! DMG="$(find_dmg)"; then
+  echo "Error: no ${MAC_ARCH} DMG found under $APP/release (electron-builder exit: $eb_ec)" >&2
   ls -la "$APP/release/" 2>/dev/null || true
+  exit "${eb_ec:-1}"
+fi
+
+if [[ ! -s "$DMG" ]]; then
+  echo "Error: DMG exists but is empty: $DMG" >&2
   exit 1
 fi
 
-DMG="$(ls -t "${dmg_candidates[@]}" | head -1)"
+if [[ "$eb_ec" -ne 0 ]]; then
+  echo "Warning: electron-builder exited $eb_ec but DMG was produced; continuing" >&2
+fi
+
 echo ""
 echo "Done."
 echo "  DMG: $DMG"
