@@ -6,6 +6,9 @@ import { themeFromSetting } from "./i18n";
 import { applyTheme } from "./theme";
 import "./styles.css";
 
+document.documentElement.dataset.platform =
+  window.agentsec?.platform ?? "unknown";
+
 try {
   const raw = localStorage.getItem("agentsec.settings");
   if (raw) {
