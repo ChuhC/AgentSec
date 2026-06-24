@@ -29,8 +29,12 @@ concurrency:
 
 jobs:
   build-macos:
-    name: macOS DMG
+    name: macOS DMG (${{ matrix.arch }})
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
     steps:
       - uses: actions/checkout@v4
 
@@ -41,18 +45,23 @@ jobs:
           cache-dependency-path: app/package-lock.json
 
       - uses: actions/setup-python@v5
+        if: matrix.arch == 'arm64'
         with:
           python-version: "3.11"
+
+      - uses: astral-sh/setup-uv@v5
+        if: matrix.arch == 'x64'
 
       - name: Package DMG
         env:
           # We upload artifacts in a separate publish job; do not auto-publish via electron-builder.
           EPUBLISH: never
-        run: ./scripts/package-dmg.sh
+          AGENTSEC_MAC_ARCH: ${{ matrix.arch }}
+        run: ./scripts/package-dmg.sh --arch ${{ matrix.arch }}
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AgentSec-macos-dmg
+          name: AgentSec-macos-dmg-${{ matrix.arch }}
           path: app/release/*.dmg
           if-no-files-found: error
 

@@ -1,89 +1,111 @@
 #!/usr/bin/env bash
-# agentSec macOS DMG 一键打包
-# 用法：./scripts/package-dmg.sh [--skip-engine] [--skip-npm-install]
+# agentSec macOS DMG packaging
+# Usage: ./scripts/package-dmg.sh [--arch arm64|x64] [--skip-engine] [--skip-npm-install]
 #
-# 产物：app/release/agentSec-<version>.dmg
-# 注意：PyInstaller 引擎须在 macOS 上构建；Windows 请用 scripts/package-win.ps1
+# Output: app/release/AgentSec-<version>-<arch>.dmg
+# Note: PyInstaller engine must be built on macOS; use scripts/package-win.ps1 on Windows.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP="$ROOT/app"
 ENGINE="$ROOT/engine"
-VENV="$ENGINE/.venv"
 ENGINE_BIN="$ENGINE/dist_pkg/agentsec-engine/agentsec-engine"
 
 SKIP_ENGINE=0
 SKIP_NPM_INSTALL=0
+MAC_ARCH=""
 
-for arg in "$@"; do
-  case "$arg" in
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --skip-engine) SKIP_ENGINE=1 ;;
     --skip-npm-install) SKIP_NPM_INSTALL=1 ;;
+    --arch=*) MAC_ARCH="${1#*=}" ;;
+    --arch)
+      shift
+      MAC_ARCH="${1:?missing value for --arch}"
+      ;;
     -h|--help)
-      echo "用法: $0 [--skip-engine] [--skip-npm-install]"
-      echo "  --skip-engine       跳过 PyInstaller 引擎冻结（引擎未改时可加速）"
-      echo "  --skip-npm-install  跳过 app/npm install"
+      echo "Usage: $0 [--arch arm64|x64] [--skip-engine] [--skip-npm-install]"
+      echo "  --arch              Target CPU (default: host native)"
+      echo "  --skip-engine       Skip PyInstaller (engine unchanged)"
+      echo "  --skip-npm-install  Skip npm install"
       exit 0
       ;;
-    *) echo "未知参数: $arg" >&2; exit 1 ;;
+    *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
+  shift
 done
 
+if [[ -z "$MAC_ARCH" ]]; then
+  case "$(uname -m)" in
+    arm64) MAC_ARCH=arm64 ;;
+    x86_64) MAC_ARCH=x64 ;;
+    *) MAC_ARCH=arm64 ;;
+  esac
+fi
+
+if [[ "$MAC_ARCH" != "arm64" && "$MAC_ARCH" != "x64" ]]; then
+  echo "Invalid --arch: $MAC_ARCH (expected arm64 or x64)" >&2
+  exit 1
+fi
+
+export AGENTSEC_MAC_ARCH="$MAC_ARCH"
+
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "错误: macOS DMG 打包请在 Darwin 上运行；Windows 请用 scripts/package-win.ps1" >&2
+  echo "Error: run macOS DMG packaging on Darwin; use scripts/package-win.ps1 on Windows" >&2
   exit 1
 fi
 
 export ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}"
 export ELECTRON_BUILDER_BINARIES_MIRROR="${ELECTRON_BUILDER_BINARIES_MIRROR:-https://npmmirror.com/mirrors/electron-builder-binaries/}"
 
-echo "==> agentSec macOS DMG 打包"
-echo "    根目录: $ROOT"
+echo "==> agentSec macOS DMG packaging ($MAC_ARCH)"
+echo "    Root: $ROOT"
 
-command -v node >/dev/null || { echo "错误: 未找到 node" >&2; exit 1; }
-command -v npm >/dev/null || { echo "错误: 未找到 npm" >&2; exit 1; }
+command -v node >/dev/null || { echo "Error: node not found" >&2; exit 1; }
+command -v npm >/dev/null || { echo "Error: npm not found" >&2; exit 1; }
 
-"$ROOT/scripts/setup-engine.sh" --with-pyinstaller
+"$ROOT/scripts/setup-engine.sh" --with-pyinstaller --arch "$MAC_ARCH"
 
 if [[ "$SKIP_NPM_INSTALL" -eq 0 ]]; then
   echo "==> npm install (app/)"
   (cd "$APP" && npm install)
 else
-  echo "==> 跳过 npm install"
+  echo "==> Skipping npm install"
 fi
 
 if [[ ! -f "$APP/build/icon.icns" ]]; then
-  echo "警告: 未找到 app/build/icon.icns，将使用 electron-builder 默认图标" >&2
+  echo "Warning: app/build/icon.icns not found; electron-builder will use the default icon" >&2
 fi
 
 cd "$APP"
 
 if [[ "$SKIP_ENGINE" -eq 0 ]]; then
-  echo "==> 冻结 Python 引擎 (PyInstaller)"
+  echo "==> Freezing Python engine (PyInstaller, $MAC_ARCH)"
   npm run build:engine
 else
-  echo "==> 跳过引擎冻结"
+  echo "==> Skipping engine freeze"
   if [[ ! -x "$ENGINE_BIN" ]]; then
-    echo "错误: 引擎二进制不存在: $ENGINE_BIN" >&2
-    echo "请先完整打包或去掉 --skip-engine" >&2
+    echo "Error: engine binary missing: $ENGINE_BIN" >&2
+    echo "Run a full build first or omit --skip-engine" >&2
     exit 1
   fi
 fi
 
-echo "==> 构建前端 + Electron 主进程"
+echo "==> Building frontend + Electron main process"
 npm run build
 
-echo "==> electron-builder (dmg)"
-npm run dist:mac
+echo "==> electron-builder (dmg, $MAC_ARCH)"
+npm run dist:mac -- --"$MAC_ARCH"
 
-DMG=$(ls -t "$APP/release/"*.dmg 2>/dev/null | head -1)
+DMG=$(ls -t "$APP/release/"*"$MAC_ARCH"*.dmg "$APP/release/"*.dmg 2>/dev/null | head -1)
 if [[ -n "$DMG" ]]; then
   echo ""
-  echo "✓ 打包完成"
+  echo "Done."
   echo "  DMG: $DMG"
-  echo "  大小: $(du -h "$DMG" | cut -f1)"
+  echo "  Size: $(du -h "$DMG" | cut -f1)"
 else
-  echo "错误: 未找到 dmg 产物" >&2
+  echo "Error: no dmg found under $APP/release" >&2
   exit 1
 fi
