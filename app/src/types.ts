@@ -133,7 +133,8 @@ export interface ProgressData {
 
 declare global {
   interface Window {
-    agentsec: {
+    agentsec?: {
+      platform: NodeJS.Platform;
       request: (method: string, params?: any) => Promise<any>;
       onEvent: (cb: (e: { event: string; data: any }) => void) => () => void;
     };

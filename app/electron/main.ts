@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import { spawn, ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -198,6 +198,13 @@ function createWindow() {
   if (process.platform === "darwin") {
     winOptions.titleBarStyle = "hiddenInset";
     winOptions.trafficLightPosition = { x: 16, y: 18 };
+  } else if (process.platform === "win32") {
+    winOptions.titleBarStyle = "hidden";
+    winOptions.titleBarOverlay = {
+      color: "#0a0612",
+      symbolColor: "#ece9f6",
+      height: 32,
+    };
   }
   win = new BrowserWindow(winOptions);
 
@@ -221,6 +228,7 @@ ipcMain.handle("engine-request", async (_e, method: string, params: any) => {
 });
 
 app.whenReady().then(() => {
+  Menu.setApplicationMenu(null);
   startEngine();
   createWindow();
   app.on("activate", () => {
