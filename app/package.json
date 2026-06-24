@@ -1,6 +1,6 @@
 {
   "name": "agentsec-app",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "AgentSec desktop client — local AI agent security scanner (Electron + React)",
   "author": "ChuhC (https://github.com/ChuhC)",
   "homepage": "https://github.com/ChuhC/AgentSec",
