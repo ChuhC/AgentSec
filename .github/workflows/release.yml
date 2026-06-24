@@ -1,0 +1,110 @@
+# Build macOS DMG + Windows NSIS on version tags, then attach to GitHub Release.
+#
+# Trigger a release build:
+#   git tag v0.1.2
+#   git push origin v0.1.2
+#
+# Manual test build (artifacts only, no Release):
+#   Actions → Release → Run workflow
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      skip_windows:
+        description: Skip Windows build (experimental)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-macos:
+    name: macOS DMG
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Package DMG
+        run: ./scripts/package-dmg.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AgentSec-macos-dmg
+          path: app/release/*.dmg
+          if-no-files-found: error
+
+  build-windows:
+    name: Windows NSIS
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_windows != true }}
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Package NSIS installer
+        shell: pwsh
+        run: .\scripts\package-win.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AgentSec-windows-exe
+          path: app/release/*.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: AgentSec-*
+          merge-multiple: true
+
+      - name: Show artifacts
+        run: find artifacts -type f -print
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
