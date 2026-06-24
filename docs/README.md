@@ -19,4 +19,7 @@
 
 ## 用户文档
 
-面向安装与使用的说明见仓库根目录 [**README.md**](../README.md)（默认英文；[简体中文](../README.md#简体中文) 在同页内锚点跳转）。
+面向安装与使用的说明见：
+
+- [README.md](../README.md)（English，仓库首页默认）
+- [README.zh-CN.md](../README.zh-CN.md)（简体中文）

@@ -12,4 +12,4 @@ cd app && npm run build && npm run screenshots
 | 中文 | [`zh/`](zh/) |
 | English | [`en/`](en/) |
 
-Referenced in [README.md](../../README.md) (English + [简体中文](../../README.md#简体中文) on the same page).
+Referenced in [README.md](../../README.md) and [README.zh-CN.md](../../README.zh-CN.md).
