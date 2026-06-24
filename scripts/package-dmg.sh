@@ -59,6 +59,9 @@ fi
 
 export ELECTRON_MIRROR="${ELECTRON_MIRROR:-https://npmmirror.com/mirrors/electron/}"
 export ELECTRON_BUILDER_BINARIES_MIRROR="${ELECTRON_BUILDER_BINARIES_MIRROR:-https://npmmirror.com/mirrors/electron-builder-binaries/}"
+if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+  unset ELECTRON_MIRROR ELECTRON_BUILDER_BINARIES_MIRROR
+fi
 
 echo "==> agentSec macOS DMG packaging ($MAC_ARCH)"
 echo "    Root: $ROOT"
@@ -99,13 +102,18 @@ npm run build
 echo "==> electron-builder (dmg, $MAC_ARCH)"
 npm run dist:mac -- --"$MAC_ARCH"
 
-DMG=$(ls -t "$APP/release/"*"$MAC_ARCH"*.dmg "$APP/release/"*.dmg 2>/dev/null | head -1)
-if [[ -n "$DMG" ]]; then
-  echo ""
-  echo "Done."
-  echo "  DMG: $DMG"
-  echo "  Size: $(du -h "$DMG" | cut -f1)"
-else
-  echo "Error: no dmg found under $APP/release" >&2
+shopt -s nullglob
+dmg_candidates=("$APP/release/"*-"$MAC_ARCH".dmg)
+shopt -u nullglob
+
+if [[ ${#dmg_candidates[@]} -eq 0 ]]; then
+  echo "Error: no *-${MAC_ARCH}.dmg found under $APP/release" >&2
+  ls -la "$APP/release/" 2>/dev/null || true
   exit 1
 fi
+
+DMG="$(ls -t "${dmg_candidates[@]}" | head -1)"
+echo ""
+echo "Done."
+echo "  DMG: $DMG"
+echo "  Size: $(du -h "$DMG" | cut -f1)"
