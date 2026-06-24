@@ -1,9 +1,16 @@
-# AgentSec
+<h1 align="center">🛡️ AgentSec — Local Security Scanner for AI Agents</h1>
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/ChuhC/AgentSec/releases)
+<p align="center">
+  <img src="app/build/icon.png" alt="AgentSec" width="128" />
+</p>
 
-**Language / 语言：** **English** · [简体中文](README.zh-CN.md)
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3" /></a>
+  <a href="https://github.com/ChuhC/AgentSec/releases"><img src="https://img.shields.io/badge/version-0.1.0-orange.svg" alt="v0.1.0" /></a>
+  <a href="https://github.com/ChuhC/AgentSec"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20(exp.)-lightgrey" alt="Platform" /></a>
+</p>
+
+<p align="center"><strong>Language / 语言：</strong> <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a></p>
 
 > One-click local scans for your AI agents — exposure risks, dependency CVEs, and MCP / Skills assets. Everything stays on your device.
 
