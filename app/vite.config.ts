@@ -5,6 +5,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron";
 import renderer from "vite-plugin-electron-renderer";
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 const __root = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +19,13 @@ function copyPreload() {
 
 export default defineConfig({
   plugins: [
+    nodePolyfills({
+      include: ["buffer", "process"],
+      globals: {
+        Buffer: true,
+        process: true,
+      },
+    }),
     react(),
     {
       name: "copy-preload",
@@ -35,6 +43,7 @@ export default defineConfig({
         vite: {
           build: {
             rollupOptions: {
+              external: ["electron", "electron-updater"],
               output: { format: "es" },
             },
           },
@@ -43,4 +52,12 @@ export default defineConfig({
     ]),
     renderer(),
   ],
+  optimizeDeps: {
+    exclude: ["@react-three/postprocessing"],
+  },
+  build: {
+    rollupOptions: {
+      external: [],
+    },
+  },
 });

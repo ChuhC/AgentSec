@@ -24,6 +24,7 @@ class Severity(str, Enum):
 class AssetType(str, Enum):
     MCP = "mcp"
     SKILL = "skill"
+    HOOK = "hook"
     KNOWLEDGE = "knowledge"
     DEPENDENCY = "dependency"
     CHANNEL = "channel"
@@ -92,6 +93,7 @@ class Asset:
     # 真机文件句柄：skill 的 SKILL.md 路径；mcp 的 config 文件路径 + 服务键
     path: Optional[str] = None
     config_key: Optional[str] = None
+    skill_scope: Optional[str] = None  # user | global（Skill 列表区分用户级 / 全局）
     permissions: List[PermissionEntry] = field(default_factory=list)
     can_update: bool = False
     can_disable: bool = True

@@ -217,6 +217,7 @@ class HermesAdapter(AgentAdapter):
                 name=name, version=str(fm.get("version", "")) or None,
                 status=ST.DISABLED.value if disabled else ST.ENABLED.value,
                 purpose=str(fm.get("description", "")) or "本机技能", source="Hermes",
+                skill_scope="user",
                 permissions=perms, path=md,
                 can_disable=True, can_uninstall=False,  # 删目录危险，灰显需手动
             ))

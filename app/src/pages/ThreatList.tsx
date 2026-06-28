@@ -426,7 +426,7 @@ function ThreatDetailModal({
           />
         </div>
 
-        <div className="cve-modal-body">
+        <div className="cve-modal-body cve-modal-body-stack">
           <div className="detail-block" style={{ marginTop: 0 }}>
             <div className="h">
               <IconAlert className="ic" size={16} /> {t("threatList.impact")}

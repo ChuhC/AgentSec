@@ -62,7 +62,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AgentSec-macos-dmg-${{ matrix.arch }}
-          path: app/release/*.dmg
+          path: |
+            app/release/*.dmg
+            app/release/*.zip
+            app/release/latest-*-mac.yml
           if-no-files-found: error
 
   build-windows:
@@ -93,7 +96,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AgentSec-windows-exe
-          path: app/release/*.exe
+          path: |
+            app/release/*.exe
+            app/release/latest.yml
           if-no-files-found: error
 
   publish:
@@ -120,6 +125,8 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             artifacts/**/*.dmg
+            artifacts/**/*.zip
             artifacts/**/*.exe
+            artifacts/**/latest*.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

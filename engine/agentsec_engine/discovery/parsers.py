@@ -172,6 +172,14 @@ def _skill_name_slug(name: str) -> str:
     return re.sub(r"[^\w-]", "-", str(name).lower()).strip("-")[:80] or "skill"
 
 
+def _skill_scope_for_root(root_label: str) -> str:
+    """Skill 根目录标签 → user（用户/工作区）或 global（插件/托管）。"""
+    label = (root_label or "").lower()
+    if label in ("plugin", "managed", "bundled", "marketplace", "official"):
+        return "global"
+    return "user"
+
+
 def discover_skills_in_roots(
     agent_id: str,
     source: str,
@@ -208,6 +216,7 @@ def discover_skills_in_roots(
                 status=ST.DISABLED.value if disabled else ST.ENABLED.value,
                 purpose=desc,
                 source=source,
+                skill_scope=_skill_scope_for_root(root_label),
                 permissions=perms,
                 path=md,
                 can_disable=True,

@@ -1,6 +1,6 @@
 import React from "react";
 import { useApp } from "../store";
-import { assetCounts, assetsByAgent } from "../selectors";
+import { assetCounts, assetsByAgent, agentHue } from "../selectors";
 import {
   IconBolt,
   IconChevron,
@@ -52,7 +52,7 @@ export function AgentList() {
           const mcp = assets.filter((a) => a.type === "mcp").length;
           const skills = assets.filter((a) => a.type === "skill").length;
           const updatable = assets.filter((a) => a.status === "updatable").length;
-          const hue = agent.kind === "openclaw" ? "#60a5fa" : "#a855f7";
+          const hue = agentHue(agent.kind);
           return (
             <div key={agent.id} className="card" style={{ padding: 22 }}>
               <div className="row" style={{ gap: 14 }}>

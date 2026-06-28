@@ -3,6 +3,7 @@ import { useApp } from "../store";
 import { ThreatList } from "./ThreatList";
 import { VulnList } from "./VulnList";
 import {
+  agentHue,
   agentOptimizationSuggestions,
   agentSecurityScore,
   activeThreatCount,
@@ -20,6 +21,8 @@ import {
   type PermissionSourceGroup,
 } from "../selectors";
 import { Radar, RadarAxis } from "../components/Radar";
+import { SituationTopology } from "../components/topology/SituationTopology";
+
 import { SeverityPill, ConfirmModal, useSeverityLabels } from "../components/common";
 import type { Agent, Asset, AgentRuntime, CVEItem, ExposureFinding, PermissionEntry, ScanSnapshot, Severity } from "../types";
 import {
@@ -41,11 +44,12 @@ import {
 
 const SEV_W: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0, safe: 0 };
 const RADAR_CATS = ["文件", "Shell", "网络", "工具", "知识库"];
-const MAIN_TABS = ["概览", "权限管理", "资产管理", "威胁管理", "漏洞管理"] as const;
-const ASSET_SUB_TABS = ["MCP", "Skills", "知识库", "通道", "依赖"] as const;
+const MAIN_TABS = ["概览", "态势拓扑", "权限管理", "资产管理", "威胁管理", "漏洞管理"] as const;
+const ASSET_SUB_TABS = ["MCP", "Skills", "Hooks", "知识库", "通道", "依赖"] as const;
 const ASSET_TAB_TYPE: Record<(typeof ASSET_SUB_TABS)[number], string> = {
   MCP: "mcp",
   Skills: "skill",
+  Hooks: "hook",
   知识库: "knowledge",
   通道: "channel",
   依赖: "dependency",
@@ -60,6 +64,7 @@ function mainTabLabel(tab: (typeof MAIN_TABS)[number], t: TFn): string {
     资产管理: "tabAssets",
     威胁管理: "tabThreats",
     漏洞管理: "tabVulns",
+    态势拓扑: "tabTopology",
   };
   return t(`agentWorkbench.${map[tab]}`);
 }
@@ -68,6 +73,7 @@ function assetSubTabLabel(tab: (typeof ASSET_SUB_TABS)[number], t: TFn): string 
   const map: Record<(typeof ASSET_SUB_TABS)[number], string> = {
     MCP: "assetMcp",
     Skills: "assetSkills",
+    Hooks: "assetHooks",
     知识库: "assetKnowledge",
     通道: "assetChannel",
     依赖: "assetDeps",
@@ -85,6 +91,7 @@ function resolveInitialTab(initialTab?: string): {
     initialTab === "权限管理" ||
     initialTab === "威胁管理" ||
     initialTab === "漏洞管理" ||
+    initialTab === "态势拓扑" ||
     initialTab === "概览"
   ) {
     return { main: initialTab, assetSub: "MCP" };
@@ -116,6 +123,7 @@ export function AgentWorkbench({
   const [refreshing, setRefreshing] = useState(false);
   const [threatFindingId, setThreatFindingId] = useState<string | undefined>();
   const [highlightAssetId, setHighlightAssetId] = useState<string | undefined>();
+  const [permFocusSource, setPermFocusSource] = useState<string | undefined>();
   const [confirmAgentUpdate, setConfirmAgentUpdate] = useState<Agent | null>(null);
   const [manualUpdateAgent, setManualUpdateAgent] = useState<Agent | null>(null);
   const [updatingAgent, setUpdatingAgent] = useState(false);
@@ -131,7 +139,7 @@ export function AgentWorkbench({
 
   const assets = assetsByAgent(snapshot, agentId);
   const activeThreats = activeThreatCount(snapshot, agentId);
-  const hue = agent.kind === "openclaw" ? "#60a5fa" : "#a855f7";
+  const hue = agentHue(agent.kind);
 
   const goAssets = (sub: (typeof ASSET_SUB_TABS)[number] = "MCP", assetId?: string) => {
     setAssetSubTab(sub);
@@ -143,6 +151,22 @@ export function AgentWorkbench({
     setThreatFindingId(findingId);
     setTab("威胁管理");
   };
+
+  const handleTopoNavigate = useCallback(
+    (target: { tab: "权限管理" | "威胁管理" | "漏洞管理" | "资产管理"; permSource?: string; assetSubTab?: string }) => {
+      if (target.tab === "权限管理") {
+        setPermFocusSource(target.permSource);
+        setTab("权限管理");
+      } else if (target.tab === "威胁管理") {
+        goThreat();
+      } else if (target.tab === "漏洞管理") {
+        setTab("漏洞管理");
+      } else if (target.tab === "资产管理") {
+        goAssets((target.assetSubTab as (typeof ASSET_SUB_TABS)[number]) || "MCP");
+      }
+    },
+    []
+  );
 
   return (
     <main className="main flush">
@@ -271,6 +295,7 @@ export function AgentWorkbench({
           agent={agent}
           assets={assets}
           onLocateSource={(sub, assetId) => goAssets(sub, assetId)}
+          focusSource={permFocusSource}
         />
       )}
       {tab === "资产管理" && (
@@ -290,6 +315,14 @@ export function AgentWorkbench({
         <ThreatList agentId={agentId} findingId={threatFindingId} embedded />
       )}
       {tab === "漏洞管理" && <VulnList agentId={agentId} embedded />}
+      {tab === "态势拓扑" && (
+        <SituationTopology
+          agentId={agentId}
+          agentLabel={agent ? agent.name : agentId}
+          snapshot={snapshot}
+          onNavigate={handleTopoNavigate}
+        />
+      )}
     </main>
   );
 }
@@ -698,16 +731,23 @@ function PermissionManagementTab({
   agent,
   assets,
   onLocateSource,
+  focusSource,
 }: {
   agent: Agent;
   assets: Asset[];
   onLocateSource: (sub: (typeof ASSET_SUB_TABS)[number], assetId: string) => void;
+  focusSource?: string;
 }) {
   const { t, layer } = useApp();
   const sections = useMemo(() => groupPermissionsBySection(agent, assets), [agent, assets]);
 
   const [catFilter, setCatFilter] = useState("all");
-  const [sourceFilter, setSourceFilter] = useState<PermissionSectionKey | "all">("all");
+  const [sourceFilter, setSourceFilter] = useState<PermissionSectionKey | "all">(
+    (focusSource as PermissionSectionKey) || "all"
+  );
+  useEffect(() => {
+    if (focusSource) setSourceFilter(focusSource as PermissionSectionKey);
+  }, [focusSource]);
   const [query, setQuery] = useState("");
   const [selection, setSelection] = useState<
     | { kind: "row"; rowKey: string }
@@ -999,11 +1039,18 @@ function PermissionRowList({
   );
 }
 
+function skillScopeLabel(scope: string | null | undefined, t: TFn): string {
+  if (scope === "global") return t("agentWorkbench.skillScopeGlobal");
+  if (scope === "user") return t("agentWorkbench.skillScopeUser");
+  return "—";
+}
+
 function permissionSectionTitle(key: PermissionSectionKey, t: TFn): string {
   const map: Record<PermissionSectionKey, string> = {
     agent_default: t("data.permissionSource.agentDefault"),
     mcp: t("agentWorkbench.assetMcp"),
     skill: t("agentWorkbench.assetSkills"),
+    hook: t("agentWorkbench.assetHooks"),
     knowledge: t("agentWorkbench.assetKnowledge"),
     channel: t("agentWorkbench.assetChannel"),
   };
@@ -1310,8 +1357,18 @@ function AssetTab({
   const isDep = typeLabel === "依赖";
   const isChannel = typeLabel === "通道";
   const isKnowledge = typeLabel === "知识库";
-  const isMcpOrSkill = typeLabel === "MCP" || typeLabel === "Skills";
+  const isMcpOrSkill = typeLabel === "MCP" || typeLabel === "Skills" || typeLabel === "Hooks";
   const isSkills = typeLabel === "Skills";
+
+  const listedAssets = useMemo(() => {
+    if (!isSkills) return assets;
+    const order: Record<string, number> = { user: 0, global: 1 };
+    return [...assets].sort((a, b) => {
+      const oa = order[a.skill_scope ?? ""] ?? 2;
+      const ob = order[b.skill_scope ?? ""] ?? 2;
+      return oa - ob || a.name.localeCompare(b.name);
+    });
+  }, [assets, isSkills]);
 
   if (assets.length === 0) {
     return (
@@ -1361,12 +1418,13 @@ function AssetTab({
                 <th style={{ width: 72 }}>{t("agentWorkbench.colUninstall")}</th>
               )}
               {isDep && <th style={{ width: 100 }}>{t("agentWorkbench.colVuln")}</th>}
+              {isSkills && <th style={{ width: 72 }}>{t("agentWorkbench.colSkillScope")}</th>}
               {isSkills && <th style={{ width: 88 }}>{t("agentWorkbench.colThreats")}</th>}
               {!isDep && <th style={{ width: 28 }} />}
             </tr>
           </thead>
           <tbody>
-            {assets.map((a) => {
+            {listedAssets.map((a) => {
               const st = statusInfo(a, t);
               const active =
                 highlightAssetId === a.id ||
@@ -1436,6 +1494,20 @@ function AssetTab({
                       ) : (
                         <span className="dim">—</span>
                       )}
+                    </td>
+                  )}
+                  {isSkills && (
+                    <td>
+                      <span
+                        className={`tag${a.skill_scope === "global" ? " tag-muted" : ""}`}
+                        style={
+                          a.skill_scope === "user"
+                            ? { background: "rgba(139,92,246,0.12)", color: "var(--purple-2)" }
+                            : undefined
+                        }
+                      >
+                        {skillScopeLabel(a.skill_scope, t)}
+                      </span>
                     </td>
                   )}
                   {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
@@ -1807,6 +1879,9 @@ function AssetDetailPanel({
 
       <div className="row" style={{ gap: 20, marginTop: 16, flexWrap: "wrap" }}>
         <DetailMeta label={t("common.table.status")} value={st.label} color={st.color} />
+        {typeLabel === "Skills" && asset.skill_scope && (
+          <DetailMeta label={t("agentWorkbench.colSkillScope")} value={skillScopeLabel(asset.skill_scope, t)} />
+        )}
         <DetailMeta
           label={isChannel ? t("agentWorkbench.colAccess") : t("common.table.version")}
           value={asset.version || "—"}

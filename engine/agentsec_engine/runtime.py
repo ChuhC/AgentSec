@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 
 from .discovery import parsers
 from .discovery.base import AgentAdapter
+from .discovery.claude import ClaudeAdapter
 from .discovery.hermes import HermesAdapter
 from .discovery.openclaw import OpenClawAdapter
 
@@ -23,6 +24,7 @@ _history: Dict[str, dict] = {}
 _ADAPTER_BY_KIND = {
     "hermes": HermesAdapter,
     "openclaw": OpenClawAdapter,
+    "claude": ClaudeAdapter,
 }
 
 

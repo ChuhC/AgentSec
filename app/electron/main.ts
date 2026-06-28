@@ -3,6 +3,7 @@ import { spawn, ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { engineChildEnv, isDebugEnabled, resolveEngine } from "./config";
+import { initAutoUpdater } from "./updater";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -231,6 +232,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(null);
   startEngine();
   createWindow();
+  initAutoUpdater(() => win);
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

@@ -20,6 +20,8 @@ AgentSec is a **macOS-first desktop security scanner** built for **Hermes** and 
 
 ![Scan results](docs/screenshots/en/02-results.png)
 
+![Situation topology](docs/screenshots/en/08-topology.png)
+
 ---
 
 ## Platform support
@@ -52,7 +54,7 @@ AgentSec is a **macOS-first desktop security scanner** built for **Hermes** and 
 
 **Permission posture** — Normalizes declared permissions from agents and attached assets across file, shell, network, tool, and knowledge-base categories; a **permission matrix** compares capability coverage per component, and **radar charts** compare agents to spot over-privileged or risky capability mixes.
 
-**Unified operations** — Fleet-wide security score, remediation queue, and per-agent workbench tie together threat review, CVE tracking, and asset ops without switching between separate scanners and config tools.
+**Unified operations** — Fleet-wide security score, remediation queue, and per-agent workbench tie together threat review, CVE tracking, and asset ops. The **Situation topology** tab renders an interactive 2D graph of each agent's MCP, Skills, permissions, threats, components, and CVE links — click any node to jump to the filtered list.
 
 **Local trust boundary** — Scan, persist, and render entirely on-device. Snapshots are redacted for credential-like fields before storage. No telemetry and no cloud account required.
 
