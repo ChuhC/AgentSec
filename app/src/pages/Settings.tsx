@@ -8,6 +8,7 @@ import {
   IconCube,
   IconAlert,
 } from "../components/Icons";
+import { UpdateSettings } from "../components/UpdateSettings";
 
 export function Settings() {
   const { settings, setSettings, configPath, t } = useApp();
@@ -75,7 +76,7 @@ export function Settings() {
         </Group>
 
         <Group icon={<IconAlert size={18} />} title={t("settings.about")}>
-          <InfoRow label={t("settings.version")} value="0.1.1" />
+          <UpdateSettings />
           <InfoRow label={t("settings.license")} value={t("settings.licenseValue")} />
         </Group>
       </div>

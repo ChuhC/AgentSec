@@ -128,7 +128,13 @@ function bootstrapSettings(): Settings {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [route, setRoute] = useState<Route>(screenshotBoot?.route ?? { name: "scan-home" });
-  const [snapshot, setSnapshot] = useState<ScanSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<ScanSnapshot | null>(() => {
+    if (screenshotBoot?.preloadSnapshot && typeof window !== "undefined") {
+      const boot = (window as unknown as { __AGENTSEC_DEMO_SNAPSHOT__?: ScanSnapshot }).__AGENTSEC_DEMO_SNAPSHOT__;
+      if (boot) return boot;
+    }
+    return null;
+  });
   const [scanState, setScanState] = useState<ScanState>(
     screenshotBoot?.preloadSnapshot ? "done" : "idle"
   );
@@ -205,8 +211,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // 启动时读取上次快照（NF-D1：重启可查看）
   useEffect(() => {
+    if (!window.agentsec) return;
     window.agentsec
-      ?.request("snapshot.get")
+      .request("snapshot.get")
       .then((res) => {
         if (res?.snapshot) {
           setSnapshot(res.snapshot);

@@ -15,6 +15,10 @@
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
+  "dependencies": {
+    "electron-updater": "^6.6.2",
+    "reactflow": "^11.11.4"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -37,14 +41,15 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.11",
     "vite-plugin-electron": "^0.29.0",
-    "vite-plugin-electron-renderer": "^0.14.6"
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vite-plugin-node-polyfills": "^0.28.0"
   },
   "build": {
     "appId": "dev.agentsec.app",
     "productName": "AgentSec",
     "icon": "build/icon.icns",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
-    "generateUpdatesFilesForAllChannels": false,
+    "generateUpdatesFilesForAllChannels": true,
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -64,7 +69,8 @@
       "icon": "build/icon.icns",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "identity": null
     },
@@ -80,8 +86,13 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true
     },
-    "publish": null
+    "publish": {
+      "provider": "github",
+      "owner": "ChuhC",
+      "repo": "AgentSec"
+    }
   }
 }

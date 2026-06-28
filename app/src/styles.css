@@ -820,6 +820,11 @@ html[data-platform="win32"] .sidebar {
   border-color: var(--modal-border-soft);
   color: var(--modal-text-1);
   font-size: 13px;
+  max-height: none;
+  overflow: visible;
+}
+.cve-modal-body-stack .evidence {
+  flex-shrink: 0;
 }
 .modal .detail-block-plain {
   background: rgba(139, 92, 246, 0.08);
@@ -2369,6 +2374,9 @@ html[data-platform="win32"] .sidebar {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: min(220px, 30vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .threat-location-link {
   display: inline-flex;
@@ -3140,3 +3148,4 @@ html[data-platform="win32"] .sidebar {
   font-family: "SF Mono", "Menlo", monospace;
   font-size: 12.5px;
 }
+

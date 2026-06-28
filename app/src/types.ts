@@ -1,7 +1,7 @@
 // 与 Python 引擎 models.py 对齐的前端类型。
 
 export type Severity = "high" | "medium" | "low" | "safe" | "info";
-export type AssetTypeT = "mcp" | "skill" | "knowledge" | "dependency" | "channel";
+export type AssetTypeT = "mcp" | "skill" | "hook" | "knowledge" | "dependency" | "channel";
 export type AssetStatusT = "enabled" | "disabled" | "updatable";
 
 export interface PermissionEntry {
@@ -29,6 +29,8 @@ export interface Asset {
   package_name: string | null;
   path: string | null;
   config_key: string | null;
+  /** Skill 范围：user=用户级，global=插件/全局 */
+  skill_scope?: string | null;
   permissions: PermissionEntry[];
   can_update: boolean;
   can_disable: boolean;
@@ -131,12 +133,40 @@ export interface ProgressData {
   counts: { agents?: number; mcp?: number; skills?: number };
 }
 
+export type UpdaterPhase =
+  | "idle"
+  | "checking"
+  | "available"
+  | "not-available"
+  | "downloading"
+  | "downloaded"
+  | "error";
+
+export interface UpdaterStatus {
+  phase: UpdaterPhase;
+  version?: string;
+  releaseNotes?: string;
+  percent?: number;
+  message?: string;
+}
+
 declare global {
   interface Window {
     agentsec?: {
       platform: NodeJS.Platform;
       request: (method: string, params?: any) => Promise<any>;
       onEvent: (cb: (e: { event: string; data: any }) => void) => () => void;
+      updater?: {
+        getInfo: () => Promise<{
+          version: string;
+          enabled: boolean;
+          status: UpdaterStatus;
+        }>;
+        check: () => Promise<{ ok: boolean; error?: string; status?: UpdaterStatus }>;
+        download: () => Promise<{ ok: boolean; error?: string; status?: UpdaterStatus }>;
+        install: () => Promise<{ ok: boolean; error?: string }>;
+        onStatus: (cb: (status: UpdaterStatus) => void) => () => void;
+      };
     };
   }
 }

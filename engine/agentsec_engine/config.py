@@ -35,6 +35,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "agents": {
         "hermes_home": "",
         "openclaw_home": "",
+        "claude_home": "",
         "hermes_bin": "",
         "openclaw_bin": "",
     },
@@ -49,6 +50,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
 _ENV_OVERRIDES: dict[str, tuple[str, str]] = {
     "AGENTSEC_HERMES_HOME": ("agents", "hermes_home"),
     "AGENTSEC_OPENCLAW_HOME": ("agents", "openclaw_home"),
+    "AGENTSEC_CLAUDE_HOME": ("agents", "claude_home"),
     "AGENTSEC_HERMES_BIN": ("agents", "hermes_bin"),
     "AGENTSEC_OPENCLAW_BIN": ("agents", "openclaw_bin"),
 }

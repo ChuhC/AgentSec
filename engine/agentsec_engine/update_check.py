@@ -254,6 +254,40 @@ def check_openclaw_update(
     )
 
 
+def check_claude_update(
+    *,
+    online: bool = True,
+    current_version: str = "",
+) -> AgentUpdateInfo:
+    """Claude Code：CLI 版本 + npm registry @anthropic-ai/claude-code。"""
+    from .discovery.claude import resolve_claude_installed_version
+
+    current = _normalize_version(current_version) or _normalize_version(
+        resolve_claude_installed_version()
+    )
+    if not online:
+        return AgentUpdateInfo(
+            current_version=current,
+            latest_version=current,
+        )
+
+    latest = fetch_npm_latest("@anthropic-ai/claude-code") or current
+    update_available = bool(latest and current and _is_newer(latest, current))
+    cli = shutil.which("claude")
+    update_command = "claude update" if cli else "npm install -g @anthropic-ai/claude-code@latest"
+    can_update = bool(cli or shutil.which("npm"))
+
+    return AgentUpdateInfo(
+        update_available=update_available,
+        current_version=current,
+        latest_version=latest if update_available else current,
+        update_method="npm",
+        can_update=can_update and update_available,
+        update_command=update_command,
+        detail=f"registry 最新 {latest}" if update_available else "",
+    )
+
+
 def apply_update_info(agent, info: AgentUpdateInfo) -> None:
     """将 AgentUpdateInfo 写入 Agent 模型。"""
     if info.current_version:

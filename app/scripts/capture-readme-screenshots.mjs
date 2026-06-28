@@ -28,6 +28,7 @@ const SCENES = [
   { id: "04-vuln-list", route: "vuln-list", snapshot: true },
   { id: "05-agent-list", route: "agent-list", snapshot: true },
   { id: "06-agent-workbench", route: "agent-workbench", snapshot: true, agent: "hermes" },
+  { id: "08-topology", route: "agent-workbench", snapshot: true, agent: "hermes", tab: "态势拓扑" },
   { id: "07-settings", route: "settings", snapshot: false },
 ];
 
@@ -90,11 +91,14 @@ async function main() {
         });
         if (scene.snapshot) params.set("snapshot", "1");
         if (scene.agent) params.set("agent", scene.agent);
+        if (scene.tab) params.set("tab", scene.tab);
 
         await page.addInitScript((snap) => {
+          window.__AGENTSEC_DEMO_SNAPSHOT__ = snap;
           window.agentsec = {
             request: async (method) => {
               if (method === "snapshot.get") return { snapshot: snap };
+              if (method === "config.get") return { config: { theme: "glass" } };
               return {};
             },
             onEvent: () => () => {},
@@ -103,7 +107,15 @@ async function main() {
 
         const url = `${baseUrl}/?${params}`;
         await page.goto(url, { waitUntil: "networkidle" });
-        await page.waitForTimeout(600);
+        if (scene.id === "08-topology") {
+          await page.waitForSelector(".topo-container .react-flow__node", { timeout: 20_000 });
+          await page.waitForTimeout(1200);
+        } else if (scene.id === "06-agent-workbench") {
+          await page.waitForSelector(".agent-workbench-head", { timeout: 20_000 });
+          await page.waitForTimeout(800);
+        } else {
+          await page.waitForTimeout(800);
+        }
 
         const outFile = path.join(OUT_ROOT, locale.code, `${scene.id}.png`);
         await page.screenshot({ path: outFile, fullPage: false });

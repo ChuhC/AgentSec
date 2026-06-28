@@ -33,3 +33,7 @@ agentsec_engine = [
     "data/atr_rules/*.yaml",
     "data/atr_rules/*.yml",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

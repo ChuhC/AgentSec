@@ -419,7 +419,18 @@ const PERM_SEV_W: Record<Severity, number> = {
 const AGENT_RADAR_COLORS: Record<string, { color: string; fill: string }> = {
   hermes: { color: "#a855f7", fill: "rgba(139,92,246,0.22)" },
   openclaw: { color: "#60a5fa", fill: "rgba(96,165,250,0.22)" },
+  claude: { color: "#f97316", fill: "rgba(249,115,22,0.22)" },
 };
+
+export const AGENT_HUE: Record<string, string> = {
+  hermes: "#a855f7",
+  openclaw: "#60a5fa",
+  claude: "#f97316",
+};
+
+export function agentHue(kind: string): string {
+  return AGENT_HUE[kind] ?? AGENT_HUE.hermes;
+}
 const FALLBACK_RADAR_COLORS = [
   { color: "#34d399", fill: "rgba(52,211,153,0.2)" },
   { color: "#eab308", fill: "rgba(234,179,8,0.2)" },
@@ -540,7 +551,7 @@ function permissionScores(s: ScanSnapshot, agentId: string): number[] {
   });
 }
 
-export type AssetSubTabKey = "MCP" | "Skills" | "知识库" | "通道" | "依赖";
+export type AssetSubTabKey = "MCP" | "Skills" | "Hooks" | "知识库" | "通道" | "依赖";
 
 export interface PermissionSourceGroup {
   sourceLabel: string;
@@ -549,7 +560,7 @@ export interface PermissionSourceGroup {
   assetId?: string;
 }
 
-export type PermissionSectionKey = "agent_default" | "mcp" | "skill" | "knowledge" | "channel";
+export type PermissionSectionKey = "agent_default" | "mcp" | "skill" | "hook" | "knowledge" | "channel";
 
 export interface PermissionSection {
   key: PermissionSectionKey;
@@ -560,6 +571,7 @@ const PERMISSION_SECTION_ORDER: PermissionSectionKey[] = [
   "agent_default",
   "mcp",
   "skill",
+  "hook",
   "knowledge",
   "channel",
 ];
@@ -567,6 +579,7 @@ const PERMISSION_SECTION_ORDER: PermissionSectionKey[] = [
 const ASSET_TYPE_TO_SECTION: Partial<Record<AssetTypeT, PermissionSectionKey>> = {
   mcp: "mcp",
   skill: "skill",
+  hook: "hook",
   knowledge: "knowledge",
   channel: "channel",
 };
@@ -575,6 +588,7 @@ const SECTION_SOURCE: Record<PermissionSectionKey, string> = {
   agent_default: "agent_config",
   mcp: "mcp",
   skill: "skill",
+  hook: "agent_config",
   knowledge: "knowledge",
   channel: "channel",
 };
@@ -688,6 +702,7 @@ export function groupPermissionsBySource(
 const SOURCE_TO_SUB_TAB: Record<string, AssetSubTabKey | null> = {
   mcp: "MCP",
   skill: "Skills",
+  hook: "Hooks",
   knowledge: "知识库",
   channel: "通道",
   dependency: "依赖",
@@ -697,6 +712,7 @@ const SOURCE_TO_SUB_TAB: Record<string, AssetSubTabKey | null> = {
 const ASSET_TYPE_TO_SUB_TAB: Record<AssetTypeT, AssetSubTabKey> = {
   mcp: "MCP",
   skill: "Skills",
+  hook: "Hooks",
   knowledge: "知识库",
   channel: "通道",
   dependency: "依赖",

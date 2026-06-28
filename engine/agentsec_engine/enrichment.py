@@ -7,7 +7,12 @@ from typing import List, Optional
 
 from .models import Agent, Asset, AssetStatus, AssetType
 from .registry_client import fetch_npm_latest, fetch_pypi_latest
-from .update_check import apply_update_info, check_hermes_update, check_openclaw_update
+from .update_check import (
+    apply_update_info,
+    check_claude_update,
+    check_hermes_update,
+    check_openclaw_update,
+)
 
 ST = AssetStatus
 AT = AssetType
@@ -69,6 +74,14 @@ def enrich_agent(
             agent.version = parsers.resolve_openclaw_installed_version()
         info = check_openclaw_update(home, online=online, current_version=agent.version)
         apply_update_info(agent, info)
+    elif agent.kind == "claude":
+        from .discovery.claude import resolve_claude_installed_version
+
+        resolved = resolve_claude_installed_version()
+        if resolved:
+            agent.version = resolved
+        info = check_claude_update(online=online, current_version=agent.version)
+        apply_update_info(agent, info)
     elif agent.latest_version is None and agent.version:
         agent.latest_version = agent.version
 
@@ -107,7 +120,7 @@ def enrich_assets(
                 _enrich_dependency(asset, online)
         elif asset.type == AT.MCP.value:
             _enrich_mcp(asset, online)
-        elif asset.type in (AT.SKILL.value, AT.KNOWLEDGE.value):
+        elif asset.type in (AT.SKILL.value, AT.HOOK.value, AT.KNOWLEDGE.value):
             _enrich_static_asset(asset)
 
 

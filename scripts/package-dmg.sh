@@ -156,6 +156,11 @@ if [[ "$eb_ec" -ne 0 ]]; then
   echo "Warning: electron-builder exited $eb_ec but DMG was produced; continuing" >&2
 fi
 
+# Matrix CI uploads arch-specific metadata (latest-{arch}-mac.yml) for electron-updater generic channel.
+if [[ -f "$APP/release/latest-mac.yml" ]]; then
+  mv "$APP/release/latest-mac.yml" "$APP/release/latest-${MAC_ARCH}-mac.yml"
+fi
+
 echo ""
 echo "Done."
 echo "  DMG: $DMG"
