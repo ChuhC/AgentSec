@@ -308,6 +308,7 @@ export const createLocaleLayer: LocaleLayerFactory = (locale: Locale, t: TFn): L
     },
 
     permissionSourceLabel(label: string) {
+      if (label === "agent_default") return t("data.permissionSource.agentDefault");
       return label;
     },
 

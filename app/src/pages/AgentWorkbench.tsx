@@ -921,7 +921,9 @@ function PermissionManagementTab({
                             className={`permission-matrix-name${rowSelected ? " active" : ""}`}
                             onClick={() => selectRow(row.key)}
                           >
-                            <span className="permission-matrix-name-text">{row.group.sourceLabel}</span>
+                            <span className="permission-matrix-name-text">
+                              {layer.permissionSourceLabel(row.group.sourceLabel)}
+                            </span>
                             <span className="tag tag-muted permission-matrix-type">
                               {permissionSectionTitle(row.sectionKey, t)}
                             </span>
@@ -976,11 +978,11 @@ function PermissionManagementTab({
                 <div className="permission-matrix-detail-title">
                   {selection?.kind === "cell"
                     ? t("agentWorkbench.permissionMatrixDetailCell", {
-                        name: selectedRow.group.sourceLabel,
+                        name: layer.permissionSourceLabel(selectedRow.group.sourceLabel),
                         category: layer.permissionCategory(selection.category),
                       })
                     : t("agentWorkbench.permissionMatrixDetailAll", {
-                        name: selectedRow.group.sourceLabel,
+                        name: layer.permissionSourceLabel(selectedRow.group.sourceLabel),
                       })}
                 </div>
                 <span className="spacer" />

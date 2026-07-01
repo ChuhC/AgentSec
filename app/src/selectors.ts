@@ -610,6 +610,8 @@ function dedupePermissions(perms: PermissionEntry[]): PermissionEntry[] {
   return out;
 }
 
+const AGENT_DEFAULT_SOURCE_LABEL = "agent_default";
+
 /** 权限 Tab：先按类型（Agent 默认 / MCP / Skill…）聚合，再按资产/组件分子组 */
 export function groupPermissionsBySection(agent: Agent, assets: Asset[]): PermissionSection[] {
   const bucket = new Map<PermissionSectionKey, PermissionSourceGroup[]>();
@@ -623,7 +625,7 @@ export function groupPermissionsBySection(agent: Agent, assets: Asset[]): Permis
   const agentPerms = dedupePermissions(agent.permissions);
   if (agentPerms.length) {
     push("agent_default", {
-      sourceLabel: "Agent 默认",
+      sourceLabel: AGENT_DEFAULT_SOURCE_LABEL,
       source: "agent_config",
       permissions: agentPerms,
     });

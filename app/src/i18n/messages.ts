@@ -274,6 +274,19 @@ const zh = {
     confirmUninstallAction: "确定卸载",
   },
 
+  topology: {
+    knowledge: "知识库",
+    channel: "通道",
+    permissions: "权限",
+    component: "组件",
+    cveVuln: "CVE 漏洞",
+    threat: "威胁",
+    legendStructure: "结构连接",
+    legendRiskPath: "风险路径",
+    severityHighShort: "高",
+    severityMedShort: "中",
+  },
+
   settings: {
     title: "设置",
     general: "通用",
@@ -774,6 +787,20 @@ const en: StringTree<typeof zh> = {
     confirmDisableMsg: "This component will stop working. Continue?",
     confirmUninstallAction: "Uninstall",
   },
+
+  topology: {
+    knowledge: "Knowledge",
+    channel: "Channels",
+    permissions: "Permissions",
+    component: "Components",
+    cveVuln: "CVE",
+    threat: "Threats",
+    legendStructure: "Structure",
+    legendRiskPath: "Risk path",
+    severityHighShort: "H",
+    severityMedShort: "M",
+  },
+
   settings: {
     title: "Settings",
     general: "General",
