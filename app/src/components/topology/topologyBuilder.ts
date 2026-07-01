@@ -181,8 +181,7 @@ export function buildTopology(
   if (deps.length) {
     nodes.push({
       id: "cat:dependency", type: "component", label: "组件", count: deps.length,
-      color: C.gray, icon: `${ICONS}/component.png`, cveCount: totalCve,
-      status: totalCve > 0 ? "risk" : "safe",
+      color: C.gray, icon: `${ICONS}/component.png`,
     });
     edges.push({ id: "e:agent-dep", source: "agent", target: "cat:dependency", sourceHandle: "bottom", targetHandle: "top" });
   }

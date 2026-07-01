@@ -42,7 +42,7 @@ function nodeSize(n: TopoNode): { w: number; h: number } {
   switch (n.type) {
     case "agent":     return { w: 184, h: 64 };
     case "category":  return { w: 164, h: 50 };
-    case "component": return { w: 164, h: 72 };
+    case "component": return { w: 164, h: 50 };
     case "risk":      return { w: 172, h: 68 };
     case "external":  return { w: 160, h: 48 };
     default:          return { w: 160, h: 48 };
@@ -151,7 +151,7 @@ export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }:
   }, []);
 
   const handleContainerClick = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest(".react-flow__controls, .topo-toolbar")) return;
+    if ((e.target as HTMLElement).closest(".react-flow__controls")) return;
     if (pointerDown.current) {
       const dx = e.clientX - pointerDown.current.x;
       const dy = e.clientY - pointerDown.current.y;
@@ -165,12 +165,6 @@ export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }:
 
   return (
     <div className="topo-container" onPointerDown={handlePointerDown} onClick={handleContainerClick}>
-      <div className="topo-toolbar">
-        <span className="topo-toolbar-title">态势拓扑</span>
-        <span className="topo-toolbar-sep" />
-        <span className="topo-toolbar-agent">{agentLabel}</span>
-        <span className="topo-toolbar-hint">拖拽平移 · 滚轮缩放 · 点击节点跳转</span>
-      </div>
       <ReactFlow
         nodes={nodes}
         edges={edges}
