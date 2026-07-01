@@ -6,7 +6,6 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3" /></a>
-  <a href="https://github.com/ChuhC/AgentSec/releases"><img src="https://img.shields.io/badge/version-0.1.1-orange.svg" alt="v0.1.1" /></a>
   <a href="https://github.com/ChuhC/AgentSec"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20(实验性)-lightgrey" alt="Platform" /></a>
 </p>
 
@@ -14,7 +13,7 @@
 
 > 一键扫描本机 AI Agent：暴露面、组件 CVE、MCP / Skills 资产。
 
-**v0.1 早期预览** — 功能仍在快速迭代，界面与接口可能调整。欢迎 Issue / PR 反馈与共建。
+**早期预览** — 功能仍在快速迭代，界面与接口可能调整。欢迎 Issue / PR 反馈与共建。
 
 AgentSec 是以 **macOS 为主平台** 的桌面安全工具，专为 **Hermes** 与 **OpenClaw** 设计。它不替代你的 Agent，而是在旁边做一轮「体检」：扫配置与技能里的风险、查依赖里的已知漏洞，并让你在同一界面里管理 MCP、Skills、知识库与组件 — **数据不出本机，无遥测，无账号**。
 

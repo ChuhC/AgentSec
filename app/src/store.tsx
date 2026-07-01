@@ -146,6 +146,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const locale = settings.language;
   const t = useMemo(() => createT(locale), [locale]);
   const layer = useMemo(() => buildLocaleLayer(locale, t), [locale, t]);
+  const tRef = useRef(t);
+  tRef.current = t;
   const navAfterScan = useRef(false);
   const snapshotRef = useRef<ScanSnapshot | null>(null);
   const scanStateRef = useRef<ScanState>("idle");
@@ -259,7 +261,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         } else if (event === "scan.error") {
           setScanState("error");
-          setScanError(data.message || "扫描失败");
+          setScanError(data.message || tRef.current("errors.scanFailed"));
           setProgress(null);
         }
       });

@@ -248,15 +248,28 @@ class HermesAdapter(AgentAdapter):
         home = getattr(self, "_home", None) or self.resolve_home()
         if not home:
             return []
-        out: List[Tuple[str, str]] = []
+        cfg = getattr(self, "_cfg", None) or parsers.read_yaml(os.path.join(home, "config.yaml")) or {}
         cfg_path = os.path.join(home, "config.yaml")
+        out: List[Tuple[str, str]] = []
+        seen: set[str] = set()
+
+        def add(path: str, source: str) -> None:
+            if path and path not in seen and os.path.isfile(path):
+                seen.add(path)
+                out.append((path, source))
+
         if os.path.isfile(cfg_path):
-            out.append((cfg_path, SRC.AGENT_CONFIG.value))
+            add(cfg_path, SRC.AGENT_CONFIG.value)
+        for asset in self._mcp(home, cfg):
+            if asset.path and asset.path != cfg_path:
+                add(asset.path, SRC.MCP.value)
+        for mcp_path in parsers.collect_atr_mcp_config_paths(home, cfg, cfg_path):
+            add(mcp_path, SRC.MCP.value)
         skills_dir = os.path.join(home, "skills")
         if os.path.isdir(skills_dir):
             for root, _dirs, files in os.walk(skills_dir):
                 if "SKILL.md" in files:
-                    out.append((os.path.join(root, "SKILL.md"), SRC.SKILL.value))
+                    add(os.path.join(root, "SKILL.md"), SRC.SKILL.value)
         return out
 
 

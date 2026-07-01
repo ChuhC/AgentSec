@@ -1,4 +1,4 @@
-# Build macOS DMG + Windows NSIS on version tags, then attach to GitHub Release.
+# Build macOS DMG (+ Windows NSIS when re-enabled) on version tags, then attach to GitHub Release.
 #
 # Trigger a release build:
 #   git tag v0.1.2
@@ -6,6 +6,8 @@
 #
 # Manual test build (artifacts only, no Release):
 #   Actions → Release → Run workflow
+#
+# Windows packaging is temporarily disabled (see commented build-windows job below).
 
 name: Release
 
@@ -18,7 +20,7 @@ on:
       skip_windows:
         description: Skip Windows build (experimental)
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
@@ -68,42 +70,44 @@ jobs:
             app/release/latest-*-mac.yml
           if-no-files-found: error
 
-  build-windows:
-    name: Windows NSIS
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_windows != true }}
-    runs-on: windows-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Package NSIS installer
-        shell: pwsh
-        env:
-          EPUBLISH: never
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: .\scripts\package-win.ps1
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: AgentSec-windows-exe
-          path: |
-            app/release/*.exe
-            app/release/latest.yml
-          if-no-files-found: error
+  # Windows NSIS — temporarily disabled until scanning/packaging is validated on CI.
+  # To re-enable: uncomment this job and add build-windows back to publish.needs.
+  # build-windows:
+  #   name: Windows NSIS
+  #   if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_windows != true }}
+  #   runs-on: windows-latest
+  #   continue-on-error: true
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: "20"
+  #         cache: npm
+  #         cache-dependency-path: app/package-lock.json
+  #
+  #     - uses: actions/setup-python@v5
+  #       with:
+  #         python-version: "3.11"
+  #
+  #     - name: Package NSIS installer
+  #       shell: pwsh
+  #       env:
+  #         EPUBLISH: never
+  #         CSC_IDENTITY_AUTO_DISCOVERY: false
+  #       run: .\scripts\package-win.ps1
+  #
+  #     - uses: actions/upload-artifact@v4
+  #       with:
+  #         name: AgentSec-windows-exe
+  #         path: |
+  #           app/release/*.exe
+  #           app/release/latest.yml
+  #         if-no-files-found: error
 
   publish:
     name: Publish GitHub Release
-    needs: [build-macos, build-windows]
+    needs: [build-macos]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:

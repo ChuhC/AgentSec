@@ -6,7 +6,6 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue.svg" alt="License: AGPL v3" /></a>
-  <a href="https://github.com/ChuhC/AgentSec/releases"><img src="https://img.shields.io/badge/version-0.1.1-orange.svg" alt="v0.1.1" /></a>
   <a href="https://github.com/ChuhC/AgentSec"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20(exp.)-lightgrey" alt="Platform" /></a>
 </p>
 
@@ -14,7 +13,7 @@
 
 > One-click local scans for your AI agents — exposure risks, dependency CVEs, and MCP / Skills assets. Everything stays on your device.
 
-**v0.1 early preview** — Actively evolving; UI and APIs may change. Issues and PRs welcome.
+**Early preview** — Actively evolving; UI and APIs may change. Issues and PRs welcome.
 
 AgentSec is a **macOS-first desktop security scanner** built for **Hermes** and **OpenClaw**. It does not replace your agents; it runs a local health check: surface misconfigurations and risky skills, match dependencies against known CVEs, and let you manage MCP servers, Skills, knowledge bases, and packages in one place — **no cloud, no telemetry, no account**.
 
