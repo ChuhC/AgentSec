@@ -364,17 +364,18 @@ def openclaw_plugin_npm_roots(home: str) -> List[str]:
 
 
 def discover_openclaw_dependencies(home: str, agent_id: str = "openclaw") -> List[Asset]:
-    """OpenClaw npm 主包 + 插件沙箱 + 可选 PyPI 清单。"""
+    """OpenClaw 主程序安装目录的运行时依赖（npm/PyPI production only）。
+
+    不含插件沙箱、用户目录 requirements.txt / pyproject.toml。
+    """
     by_key: Dict[Tuple[str, str, str], Asset] = {}
 
-    def ingest(deps: List[Asset], install_root: Optional[str], label: str) -> None:
+    def ingest(deps: List[Asset], install_root: Optional[str]) -> None:
         for d in deps:
             key = (d.name, d.version or "", d.ecosystem or "")
             if key in by_key:
                 continue
-            if label == "plugin":
-                d.purpose = "插件 npm 依赖组件"
-            elif label == "openclaw":
+            if d.ecosystem == "npm":
                 d.purpose = "npm 依赖组件"
             if d.ecosystem == "npm" and install_root:
                 d.manager = "npm"
@@ -393,17 +394,7 @@ def discover_openclaw_dependencies(home: str, agent_id: str = "openclaw") -> Lis
 
     pkg_root = resolve_openclaw_package_dir()
     if pkg_root:
-        ingest(deps_from_npm_workspace(pkg_root, agent_id), pkg_root, "openclaw")
-
-    for plugin_root in openclaw_plugin_npm_roots(home):
-        ingest(deps_from_npm_workspace(plugin_root, agent_id), plugin_root, "plugin")
-
-    req_path = os.path.join(home, "requirements.txt")
-    ingest(deps_from_requirements(req_path, agent_id), home, "local")
-
-    py_path = os.path.join(home, "pyproject.toml")
-    if os.path.isfile(py_path):
-        ingest(deps_from_pyproject(py_path, agent_id), home, "local")
+        ingest(deps_from_npm_workspace(pkg_root, agent_id), pkg_root)
 
     return sorted(by_key.values(), key=lambda a: (a.ecosystem or "", a.name.lower()))
 
@@ -500,7 +491,7 @@ def _lock_package_name(path: str) -> Optional[str]:
     return path.split("node_modules/")[-1] or None
 
 
-def _parse_lock_packages(lock_path: str) -> List[Tuple[str, str]]:
+def _parse_lock_packages(lock_path: str, *, production_only: bool = False) -> List[Tuple[str, str]]:
     """package-lock.json → [(name, resolved_version), ...]。"""
     lock = read_json(lock_path)
     if not lock:
@@ -509,6 +500,10 @@ def _parse_lock_packages(lock_path: str) -> List[Tuple[str, str]]:
     seen = set()
     for path, info in (lock.get("packages") or {}).items():
         if not path or not isinstance(info, dict):
+            continue
+        if production_only and (
+            info.get("dev") or info.get("optional") or info.get("devOptional")
+        ):
             continue
         name = _lock_package_name(path)
         ver = info.get("version")
@@ -521,15 +516,6 @@ def _parse_lock_packages(lock_path: str) -> List[Tuple[str, str]]:
         out.append(key)
     return out
 
-
-def _iter_workspace_package_json(root: str) -> List[str]:
-    """workspace 内全部 package.json（跳过 node_modules）。"""
-    paths: List[str] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in ("node_modules", ".git", "dist", "build")]
-        if "package.json" in filenames:
-            paths.append(os.path.join(dirpath, "package.json"))
-    return paths
 
 
 def _parse_pyproject_deps(path: str) -> List[Tuple[str, str]]:
@@ -564,34 +550,27 @@ def deps_from_pyproject(path: str, agent_id: str) -> List[Asset]:
 
 
 def deps_from_npm_workspace(agent_dir: str, agent_id: str) -> List[Asset]:
-    """npm workspace 全量依赖：lock 已安装树 + 各 workspace manifest + pyproject。"""
+    """Agent 安装目录的运行时 npm/PyPI 依赖（仅 production，不含 dev/peer/optional）。"""
     if not os.path.isdir(agent_dir):
         return []
 
     by_key: Dict[Tuple[str, str, str], Asset] = {}
     lock_path = os.path.join(agent_dir, "package-lock.json")
-    lock_best: Dict[str, str] = {}
-    for name, ver in _parse_lock_packages(lock_path):
-        lock_best[name] = ver
-        key = (name, ver, "npm")
-        if key not in by_key:
-            by_key[key] = dep_asset(agent_id, name, ver, "npm")
 
-    for pkg_path in _iter_workspace_package_json(agent_dir):
-        pkg = read_json(pkg_path) or {}
-        for section in (
-            "dependencies",
-            "devDependencies",
-            "optionalDependencies",
-            "peerDependencies",
-        ):
-            for name, spec in (pkg.get(section) or {}).items():
-                ver = lock_best.get(str(name)) or clean_version(str(spec))
-                if not ver:
-                    continue
-                key = (str(name), ver, "npm")
-                if key not in by_key:
-                    by_key[key] = dep_asset(agent_id, str(name), ver, "npm")
+    if os.path.isfile(lock_path):
+        for name, ver in _parse_lock_packages(lock_path, production_only=True):
+            key = (name, ver, "npm")
+            if key not in by_key:
+                by_key[key] = dep_asset(agent_id, name, ver, "npm")
+    else:
+        root_pkg = read_json(os.path.join(agent_dir, "package.json")) or {}
+        for name, spec in (root_pkg.get("dependencies") or {}).items():
+            ver = clean_version(str(spec))
+            if not ver:
+                continue
+            key = (str(name), ver, "npm")
+            if key not in by_key:
+                by_key[key] = dep_asset(agent_id, str(name), ver, "npm")
 
     for name, ver in _parse_pyproject_deps(os.path.join(agent_dir, "pyproject.toml")):
         if not ver:

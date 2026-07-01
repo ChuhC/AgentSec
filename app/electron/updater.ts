@@ -51,11 +51,58 @@ function configureFeed() {
   }
 }
 
-export function initAutoUpdater(getWindow: () => BrowserWindow | null) {
-  if (!app.isPackaged) return;
+function registerUpdaterIpc(getWindow: () => BrowserWindow | null) {
+  ipcMain.handle("updater-get-info", () => ({
+    version: app.getVersion(),
+    enabled,
+    status,
+  }));
 
-  enabled = process.platform === "darwin" || process.platform === "win32";
-  if (!enabled) return;
+  ipcMain.handle("updater-check", async () => {
+    if (!enabled) {
+      return { ok: false, error: "updater disabled" };
+    }
+    try {
+      await autoUpdater.checkForUpdates();
+      return { ok: true, status };
+    } catch (e: any) {
+      send(getWindow(), {
+        phase: "error",
+        message: e?.message || String(e),
+      });
+      return { ok: false, error: e?.message || String(e) };
+    }
+  });
+
+  ipcMain.handle("updater-download", async () => {
+    if (!enabled) return { ok: false, error: "updater disabled" };
+    try {
+      await autoUpdater.downloadUpdate();
+      return { ok: true, status };
+    } catch (e: any) {
+      send(getWindow(), {
+        phase: "error",
+        message: e?.message || String(e),
+      });
+      return { ok: false, error: e?.message || String(e) };
+    }
+  });
+
+  ipcMain.handle("updater-install", () => {
+    if (!enabled) return { ok: false, error: "updater disabled" };
+    autoUpdater.quitAndInstall();
+    return { ok: true };
+  });
+}
+
+export function initAutoUpdater(getWindow: () => BrowserWindow | null) {
+  enabled =
+    app.isPackaged &&
+    (process.platform === "darwin" || process.platform === "win32");
+
+  // Dev / unpackaged: handlers must exist so Settings does not throw on getInfo().
+  registerUpdaterIpc(getWindow);
+  if (!app.isPackaged || !enabled) return;
 
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
@@ -102,48 +149,6 @@ export function initAutoUpdater(getWindow: () => BrowserWindow | null) {
       phase: "error",
       message: err?.message || String(err),
     });
-  });
-
-  ipcMain.handle("updater-get-info", () => ({
-    version: app.getVersion(),
-    enabled,
-    status,
-  }));
-
-  ipcMain.handle("updater-check", async () => {
-    if (!enabled) {
-      return { ok: false, error: "updater disabled" };
-    }
-    try {
-      await autoUpdater.checkForUpdates();
-      return { ok: true, status };
-    } catch (e: any) {
-      send(getWindow(), {
-        phase: "error",
-        message: e?.message || String(e),
-      });
-      return { ok: false, error: e?.message || String(e) };
-    }
-  });
-
-  ipcMain.handle("updater-download", async () => {
-    if (!enabled) return { ok: false, error: "updater disabled" };
-    try {
-      await autoUpdater.downloadUpdate();
-      return { ok: true, status };
-    } catch (e: any) {
-      send(getWindow(), {
-        phase: "error",
-        message: e?.message || String(e),
-      });
-      return { ok: false, error: e?.message || String(e) };
-    }
-  });
-
-  ipcMain.handle("updater-install", () => {
-    if (!enabled) return { ok: false, error: "updater disabled" };
-    autoUpdater.quitAndInstall();
-    return { ok: true };
   });
 
   setTimeout(() => {

@@ -56,6 +56,8 @@ const ASSET_TAB_TYPE: Record<(typeof ASSET_SUB_TABS)[number], string> = {
 };
 
 type TFn = ReturnType<typeof useApp>["t"];
+type DependencyFilter = "all" | "vulnerable";
+type SkillFilter = "all" | "threats";
 
 function mainTabLabel(tab: (typeof MAIN_TABS)[number], t: TFn): string {
   const map: Record<(typeof MAIN_TABS)[number], string> = {
@@ -1331,6 +1333,8 @@ function AssetTab({
     useApp();
   const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
   const [depModal, setDepModal] = useState<Asset | null>(null);
+  const [dependencyFilter, setDependencyFilter] = useState<DependencyFilter>("all");
+  const [skillFilter, setSkillFilter] = useState<SkillFilter>("all");
   const [confirm, setConfirm] = useState<{ kind: string; id: string } | null>(null);
 
   useEffect(() => {
@@ -1350,15 +1354,65 @@ function AssetTab({
   const isMcpOrSkill = typeLabel === "MCP" || typeLabel === "Skills" || typeLabel === "Hooks";
   const isSkills = typeLabel === "Skills";
 
+  const depCveCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!snapshot || !isDep) return counts;
+    for (const asset of assets) {
+      counts.set(asset.id, cveItemsForDep(snapshot, agentId, asset.name, asset.version).length);
+    }
+    return counts;
+  }, [agentId, assets, isDep, snapshot]);
+
+  const vulnerableDepCount = useMemo(() => {
+    let count = 0;
+    for (const cveCount of depCveCounts.values()) {
+      if (cveCount > 0) count += 1;
+    }
+    return count;
+  }, [depCveCounts]);
+
+  const skillThreatCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!snapshot || !isSkills) return counts;
+    for (const asset of assets) {
+      const activeThreats = exposureFindingsForSkill(snapshot, agentId, asset).filter(
+        (f) => !isThreatIgnored(snapshot, f)
+      );
+      counts.set(asset.id, activeThreats.length);
+    }
+    return counts;
+  }, [agentId, assets, isSkills, snapshot]);
+
+  const riskySkillCount = useMemo(() => {
+    let count = 0;
+    for (const threatCount of skillThreatCounts.values()) {
+      if (threatCount > 0) count += 1;
+    }
+    return count;
+  }, [skillThreatCounts]);
+
   const listedAssets = useMemo(() => {
+    if (isDep) {
+      return [...assets]
+        .filter((a) => dependencyFilter === "all" || (depCveCounts.get(a.id) ?? 0) > 0)
+        .sort((a, b) => {
+          const ca = depCveCounts.get(a.id) ?? 0;
+          const cb = depCveCounts.get(b.id) ?? 0;
+          return cb - ca || a.name.localeCompare(b.name);
+        });
+    }
     if (!isSkills) return assets;
     const order: Record<string, number> = { user: 0, global: 1 };
-    return [...assets].sort((a, b) => {
-      const oa = order[a.skill_scope ?? ""] ?? 2;
-      const ob = order[b.skill_scope ?? ""] ?? 2;
-      return oa - ob || a.name.localeCompare(b.name);
-    });
-  }, [assets, isSkills]);
+    return [...assets]
+      .filter((a) => skillFilter === "all" || (skillThreatCounts.get(a.id) ?? 0) > 0)
+      .sort((a, b) => {
+        const ta = skillThreatCounts.get(a.id) ?? 0;
+        const tb = skillThreatCounts.get(b.id) ?? 0;
+        const oa = order[a.skill_scope ?? ""] ?? 2;
+        const ob = order[b.skill_scope ?? ""] ?? 2;
+        return tb - ta || oa - ob || a.name.localeCompare(b.name);
+      });
+  }, [assets, depCveCounts, dependencyFilter, isDep, isSkills, skillFilter, skillThreatCounts]);
 
   if (assets.length === 0) {
     return (
@@ -1386,53 +1440,105 @@ function AssetTab({
   return (
     <div className="asset-tab">
       <div className="card asset-tab-list">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>{t("common.table.name")}</th>
-              <th style={{ width: 110 }}>{t("common.table.status")}</th>
-              {!isKnowledge && (
-                <th style={{ width: 100 }}>
-                  {isChannel ? t("agentWorkbench.colAccess") : t("common.table.version")}
-                </th>
-              )}
-              {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
-                <th style={{ width: 72 }}>{t("agentWorkbench.colUpdate")}</th>
-              )}
-              {!isDep && !isKnowledge && (
-                <th style={{ width: 72 }}>
-                  {isMcpOrSkill ? t("agentWorkbench.colActions") : t("agentWorkbench.colDisable")}
-                </th>
-              )}
-              {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
-                <th style={{ width: 72 }}>{t("agentWorkbench.colUninstall")}</th>
-              )}
-              {isDep && <th style={{ width: 100 }}>{t("agentWorkbench.colVuln")}</th>}
-              {isSkills && <th style={{ width: 72 }}>{t("agentWorkbench.colSkillScope")}</th>}
-              {isSkills && <th style={{ width: 88 }}>{t("agentWorkbench.colThreats")}</th>}
-              {!isDep && <th style={{ width: 28 }} />}
-            </tr>
-          </thead>
-          <tbody>
-            {listedAssets.map((a) => {
-              const st = statusInfo(a, t);
-              const active =
-                highlightAssetId === a.id ||
-                (isDep ? depModal?.id === a.id : detailAsset?.id === a.id);
-              const cveRow = snapshot
-                ? cveItemsForDep(snapshot, agentId, a.name, a.version).length
-                : 0;
-              const skillThreats =
-                isSkills && snapshot ? exposureFindingsForSkill(snapshot, agentId, a) : [];
-              const skillThreatActive = skillThreats.filter(
-                (f) => !snapshot || !isThreatIgnored(snapshot, f)
-              );
-              return (
-                <tr
-                  key={a.id}
-                  className={`asset-tab-row${active ? " active" : ""}`}
-                  onClick={() => (isDep ? openDepModal(a) : setDetailAsset(a))}
-                >
+        {isDep && (
+          <div className="asset-filter-bar">
+            <div className="asset-filter-segment" role="group" aria-label={t("agentWorkbench.depFilterLabel")}>
+              <button
+                type="button"
+                className={dependencyFilter === "all" ? "active" : ""}
+                onClick={() => setDependencyFilter("all")}
+              >
+                {t("agentWorkbench.depFilterAll", { count: assets.length })}
+              </button>
+              <button
+                type="button"
+                className={dependencyFilter === "vulnerable" ? "active" : ""}
+                onClick={() => setDependencyFilter("vulnerable")}
+              >
+                {t("agentWorkbench.depFilterVulnerable", { count: vulnerableDepCount })}
+              </button>
+            </div>
+            <span className="muted asset-filter-meta">
+              {t("agentWorkbench.depFilterMeta", { count: vulnerableDepCount })}
+            </span>
+          </div>
+        )}
+        {isSkills && (
+          <div className="asset-filter-bar">
+            <div className="asset-filter-segment" role="group" aria-label={t("agentWorkbench.skillFilterLabel")}>
+              <button
+                type="button"
+                className={skillFilter === "all" ? "active" : ""}
+                onClick={() => setSkillFilter("all")}
+              >
+                {t("agentWorkbench.skillFilterAll", { count: assets.length })}
+              </button>
+              <button
+                type="button"
+                className={skillFilter === "threats" ? "active" : ""}
+                onClick={() => setSkillFilter("threats")}
+              >
+                {t("agentWorkbench.skillFilterRisky", { count: riskySkillCount })}
+              </button>
+            </div>
+            <span className="muted asset-filter-meta">
+              {t("agentWorkbench.skillFilterMeta", { count: riskySkillCount })}
+            </span>
+          </div>
+        )}
+
+        {listedAssets.length === 0 ? (
+          <div className="asset-filter-empty muted">
+            {isSkills ? t("agentWorkbench.skillFilterEmpty") : t("agentWorkbench.depFilterEmpty")}
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>{t("common.table.name")}</th>
+                <th style={{ width: 110 }}>{t("common.table.status")}</th>
+                {!isKnowledge && (
+                  <th style={{ width: 100 }}>
+                    {isChannel ? t("agentWorkbench.colAccess") : t("common.table.version")}
+                  </th>
+                )}
+                {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
+                  <th style={{ width: 72 }}>{t("agentWorkbench.colUpdate")}</th>
+                )}
+                {!isDep && !isKnowledge && (
+                  <th style={{ width: 72 }}>
+                    {isMcpOrSkill ? t("agentWorkbench.colActions") : t("agentWorkbench.colDisable")}
+                  </th>
+                )}
+                {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
+                  <th style={{ width: 72 }}>{t("agentWorkbench.colUninstall")}</th>
+                )}
+                {isDep && <th style={{ width: 100 }}>{t("agentWorkbench.colVuln")}</th>}
+                {isSkills && <th style={{ width: 72 }}>{t("agentWorkbench.colSkillScope")}</th>}
+                {isSkills && <th style={{ width: 88 }}>{t("agentWorkbench.colThreats")}</th>}
+                {!isDep && <th style={{ width: 28 }} />}
+              </tr>
+            </thead>
+            <tbody>
+              {listedAssets.map((a) => {
+                const st = statusInfo(a, t);
+                const active =
+                  highlightAssetId === a.id ||
+                  (isDep ? depModal?.id === a.id : detailAsset?.id === a.id);
+                const cveRow = isDep ? (depCveCounts.get(a.id) ?? 0) : 0;
+                const skillThreatCount = isSkills ? (skillThreatCounts.get(a.id) ?? 0) : 0;
+                const skillThreatActive =
+                  isSkills && snapshot
+                    ? exposureFindingsForSkill(snapshot, agentId, a).filter(
+                        (f) => !isThreatIgnored(snapshot, f)
+                      )
+                    : [];
+                return (
+                  <tr
+                    key={a.id}
+                    className={`asset-tab-row${active ? " active" : ""}`}
+                    onClick={() => (isDep ? openDepModal(a) : setDetailAsset(a))}
+                  >
                   <td>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{a.name}</div>
                     <div className="dim" style={{ fontSize: 11.5, marginTop: 2 }}>
@@ -1529,7 +1635,7 @@ function AssetTab({
                   )}
                   {isSkills && (
                     <td onClick={(e) => e.stopPropagation()}>
-                      {skillThreatActive.length > 0 ? (
+                      {skillThreatCount > 0 ? (
                         <span
                           className="act-link act-threat"
                           onClick={() =>
@@ -1537,7 +1643,7 @@ function AssetTab({
                           }
                         >
                           {t("agentWorkbench.skillThreatCount", {
-                            count: skillThreatActive.length,
+                            count: skillThreatCount,
                           })}
                         </span>
                       ) : (
@@ -1556,11 +1662,12 @@ function AssetTab({
                       />
                     </td>
                   )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {detailAsset && (

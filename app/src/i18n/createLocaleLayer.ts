@@ -67,6 +67,60 @@ const PERM_CATEGORY_KEY: Record<string, string> = {
   "知识库": "common.permCategory.knowledge",
 };
 
+/** 引擎 purpose 固定中文 → data.purpose 子键 */
+const PURPOSE_ZH_TO_KEY: Record<string, string> = {
+  "本机技能": "localSkill",
+  "MCP 服务": "mcpService",
+  "会话记忆与用户画像存储": "sessionMemory",
+  "归档与整理历史会话、知识片段": "sessionArchive",
+  "本地文件读写访问": "localFileAccess",
+  "远程命令执行，支持在目标主机上执行 shell 命令并返回结果。": "remoteShell",
+  "无头浏览器自动化与网页抓取": "headlessBrowser",
+  "联网搜索并汇总结果": "webSearch",
+  "执行 Python 代码片段": "pythonExec",
+  "辅助技能": "utilitySkill",
+  "GitHub 仓库知识库": "githubKnowledge",
+  "远程文档知识库": "remoteKnowledge",
+  "发起 HTTP 网络请求": "httpRequest",
+  "读取数据库": "databaseRead",
+  "安全研究技能": "securityResearchSkill",
+  "npm 依赖组件": "depNpm",
+  "插件 npm 依赖组件": "depPluginNpm",
+  "用户 Skill": "userSkill",
+  "插件生命周期 Hooks": "pluginHooks",
+  "项目级 Agent 规则": "projectAgentRules",
+  "项目 Cursor/Claude 规则": "projectCursorRules",
+  "Claude Code CLI 主程序": "claudeCliMain",
+};
+
+/** 引擎 permission.name 固定中文 → data.permissionName 子键 */
+const PERM_NAME_ZH_TO_KEY: Record<string, string> = {
+  "读取本地文件": "readLocalFiles",
+  "执行 Shell 命令": "execShell",
+  "访问外部网络": "accessExternalNetwork",
+  "读写文件": "readWriteFiles",
+  "执行命令、管理进程": "execManageProcess",
+  "访问内网、外网": "intranetExtranet",
+  "读取、写入、创建、删除": "readWriteCreateDelete",
+  "写入、创建、删除文件": "writeCreateDeleteFiles",
+  "删除文件": "deleteFiles",
+  "读取文件": "readFiles",
+  "访问网络": "accessNetwork",
+  "发起网络请求": "httpRequest",
+  "网络搜索": "webSearch",
+  "代码执行 (Python)": "pythonExec",
+  "读取知识库内容": "readKnowledge",
+  "下载远程内容": "downloadRemote",
+  "读写数据库": "readWriteDb",
+  "读数据库": "readDb",
+};
+
+const AGENT_DESC_ZH_TO_KEY: Record<string, string> = {
+  "通用智能体": "data.agentDesc.general",
+  "通用智能体，擅长任务规划与工具调用": "data.agentDesc.generalPlanner",
+  "安全研究专用智能体，专注漏洞分析与利用": "data.agentDesc.securityResearch",
+};
+
 function lookup(t: TFn, map: Record<string, string>, value: string): string | undefined {
   const key = map[value];
   return key ? t(key) : undefined;
@@ -253,6 +307,54 @@ function localizeEvidence(t: TFn, evidence: string): string {
   return out;
 }
 
+function localizeChannelDetailParts(t: TFn, details: string, isEn: boolean): string {
+  const sep = isEn ? "; " : "；";
+  return details
+    .split(/[;；]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      let m = part.match(/^DM 策略 (.+)$/);
+      if (m) return t("data.purpose.channelDmPolicy", { policy: m[1] });
+      m = part.match(/^模式 (.+)$/);
+      if (m) return t("data.purpose.channelMode", { mode: m[1] });
+      m = part.match(/^凭证引用：(.+)$/);
+      if (m) return t("data.purpose.channelCreds", { creds: m[1] });
+      return part;
+    })
+    .join(sep);
+}
+
+function localizeAssetPurposeText(t: TFn, purpose: string, isEn: boolean): string {
+  const trimmed = purpose.trim();
+  if (!trimmed) return purpose;
+
+  const purposeKey = PURPOSE_ZH_TO_KEY[trimmed];
+  if (purposeKey) return t(`data.purpose.${purposeKey}`);
+
+  let m = trimmed.match(/^(.+?) 依赖组件$/);
+  if (m) return t("data.purpose.depComponent", { ecosystem: m[1] });
+
+  m = trimmed.match(/^(.+?) IM 通道(?:（(.+)）)?$/);
+  if (m) {
+    const label = m[1];
+    const details = m[2];
+    if (details) {
+      return t("data.purpose.channelImDetail", {
+        label,
+        details: localizeChannelDetailParts(t, details, isEn),
+      });
+    }
+    return t("data.purpose.channelIm", { label });
+  }
+
+  m = trimmed.match(/^通用智能体（模型：(.+)）$/);
+  if (m) return t("data.agentDesc.hermesModel", { model: m[1] });
+
+  if (isEn && hasCjk(trimmed)) return t("data.engineText.fallback");
+  return purpose;
+}
+
 export const createLocaleLayer: LocaleLayerFactory = (locale: Locale, t: TFn): LocaleDataLayer => {
   const isEn = locale === "en";
 
@@ -320,6 +422,11 @@ export const createLocaleLayer: LocaleLayerFactory = (locale: Locale, t: TFn): L
     },
 
     agentDescription(description: string) {
+      const key = AGENT_DESC_ZH_TO_KEY[description.trim()];
+      if (key) return t(key);
+      const m = description.match(/^通用智能体（模型：(.+)）$/);
+      if (m) return t("data.agentDesc.hermesModel", { model: m[1] });
+      if (isEn && hasCjk(description)) return t("data.engineText.fallback");
       return description;
     },
 
@@ -346,7 +453,7 @@ export const createLocaleLayer: LocaleLayerFactory = (locale: Locale, t: TFn): L
       }
       const legacyMcp = localizeLegacyMcpPurpose(purpose, t);
       if (legacyMcp) return legacyMcp;
-      return purpose;
+      return localizeAssetPurposeText(t, purpose, isEn);
     },
 
     permissionCategory(category: string) {
@@ -354,6 +461,9 @@ export const createLocaleLayer: LocaleLayerFactory = (locale: Locale, t: TFn): L
     },
 
     permissionName(name: string) {
+      const key = PERM_NAME_ZH_TO_KEY[name.trim()];
+      if (key) return t(`data.permissionName.${key}`);
+      if (isEn && hasCjk(name)) return t("data.engineText.fallback");
       return name;
     },
 
