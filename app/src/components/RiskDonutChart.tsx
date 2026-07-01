@@ -1,4 +1,5 @@
 import React from "react";
+import { useApp } from "../store";
 import type { RiskCategoryRow } from "../selectors";
 import type { Severity } from "../types";
 
@@ -13,10 +14,12 @@ const SEV_COLOR: Record<Severity, string> = {
 const FALLBACK_COLORS = ["#a855f7", "#60a5fa", "#34d399", "#f59e0b", "#f472b6", "#94a3b8"];
 
 export function RiskDonutChart({ rows }: { rows: RiskCategoryRow[] }) {
+  const { t } = useApp();
+
   if (rows.length === 0) {
     return (
       <div className="muted" style={{ fontSize: 13, padding: "24px 0", textAlign: "center" }}>
-        暂无暴露面风险类别
+        {t("data.riskChartEmpty")}
       </div>
     );
   }
@@ -62,7 +65,7 @@ export function RiskDonutChart({ rows }: { rows: RiskCategoryRow[] }) {
             {total}
           </text>
           <text x={cx} y={cy + 14} textAnchor="middle" fontSize="11" fill="#a59fc0">
-            风险项
+            {t("data.riskChartTotal")}
           </text>
         </svg>
       </div>

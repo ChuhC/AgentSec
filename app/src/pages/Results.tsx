@@ -295,9 +295,9 @@ export function Results() {
   ];
 
   const assetStats: StatItem[] = [
-    { value: ac.agents, label: "Agents", color: "var(--purple-2)" },
-    { value: ac.mcp, label: "MCP", color: "var(--purple-2)" },
-    { value: ac.skills, label: "Skills", color: "var(--purple-2)" },
+    { value: ac.agents, label: t("agentList.statAgents"), color: "var(--purple-2)" },
+    { value: ac.mcp, label: t("agentList.statMcp"), color: "var(--purple-2)" },
+    { value: ac.skills, label: t("agentList.statSkills"), color: "var(--purple-2)" },
   ];
 
   return (

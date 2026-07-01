@@ -19,6 +19,7 @@ export interface LocaleDataLayer {
   threatEvidence(evidence: string): string;
 
   agentDescription(description: string): string;
+  agentUpdateDetail(detail: string): string;
   assetPurpose(purpose: string): string;
   cvePlainExplanation(summary: string): string;
 

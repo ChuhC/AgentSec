@@ -218,13 +218,31 @@ class OpenClawAdapter(AgentAdapter):
         if not home:
             return []
         sp = getattr(self, "_settings_path_cache", None) or self._real_config_path(home)
-        out: List[Tuple[str, str]] = []
-        if sp:
-            out.append((sp, SRC.AGENT_CONFIG.value))
         data = parsers.read_json(sp) or {} if sp else {}
+        out: List[Tuple[str, str]] = []
+        seen: set[str] = set()
+
+        def add(path: str, source: str) -> None:
+            if path and path not in seen and os.path.isfile(path):
+                seen.add(path)
+                out.append((path, source))
+
+        if sp:
+            add(sp, SRC.AGENT_CONFIG.value)
+        extra_dirs: List[str] = []
+        ws = parsers.openclaw_workspace_dir(home, data)
+        if ws:
+            extra_dirs.append(ws)
+        for asset in self._mcp(home, data, sp):
+            if asset.path and asset.path != sp:
+                add(asset.path, SRC.MCP.value)
+        for mcp_path in parsers.collect_atr_mcp_config_paths(
+            home, data, sp, extra_dirs=extra_dirs
+        ):
+            add(mcp_path, SRC.MCP.value)
         for skill in self._discover_skills(home, data):
             if skill.path and os.path.isfile(skill.path):
-                out.append((skill.path, SRC.SKILL.value))
+                add(skill.path, SRC.SKILL.value)
         return out
 
     def _deps(self, home: str, _data: dict) -> List[Asset]:

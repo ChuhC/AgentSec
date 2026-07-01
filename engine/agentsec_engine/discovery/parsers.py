@@ -687,6 +687,75 @@ def _looks_secret_env_key(key: str) -> bool:
     return any(t in k for t in ("key", "token", "secret", "password", "api"))
 
 
+_MCP_JSON_BASENAMES = ("mcp.json", ".mcp.json", "mcp_config.json", "claude_desktop_config.json")
+
+
+def _resolve_mcp_config_candidate(path: str, search_roots: List[str]) -> Optional[str]:
+    """Resolve a possibly-relative MCP config path to an existing file."""
+    if not path:
+        return None
+    expanded = os.path.expanduser(path)
+    if os.path.isabs(expanded):
+        return expanded if os.path.isfile(expanded) else None
+    for root in search_roots:
+        if not root:
+            continue
+        candidate = os.path.join(root, expanded)
+        if os.path.isfile(candidate):
+            return os.path.realpath(candidate)
+    return None
+
+
+def collect_atr_mcp_config_paths(
+    home: str,
+    cfg: dict,
+    agent_config_path: Optional[str],
+    *,
+    extra_dirs: Optional[List[str]] = None,
+) -> List[str]:
+    """Collect standalone MCP JSON paths for ATR (excludes inline agent config)."""
+    seen: set[str] = set()
+    out: List[str] = []
+    agent_real = (
+        os.path.realpath(agent_config_path)
+        if agent_config_path and os.path.isfile(agent_config_path)
+        else ""
+    )
+    search_roots: List[str] = []
+    if home:
+        search_roots.append(home)
+    for d in extra_dirs or []:
+        if d and os.path.isdir(d):
+            search_roots.append(os.path.realpath(os.path.expanduser(d)))
+
+    def add(path: Optional[str]) -> None:
+        if not path or not os.path.isfile(path):
+            return
+        real = os.path.realpath(path)
+        if real == agent_real or real in seen:
+            return
+        seen.add(real)
+        out.append(real)
+
+    for root in search_roots:
+        for name in _MCP_JSON_BASENAMES:
+            add(os.path.join(root, name))
+
+    for srv in (cfg.get("mcp_servers") or {}).values():
+        if not isinstance(srv, dict):
+            continue
+        for key in ("config", "configFile", "config_path", "path"):
+            ref = srv.get(key)
+            if ref:
+                add(_resolve_mcp_config_candidate(str(ref), search_roots))
+        for arg in srv.get("args") or []:
+            a = str(arg)
+            if a.endswith((".json", ".yaml", ".yml")):
+                add(_resolve_mcp_config_candidate(a, search_roots))
+
+    return out
+
+
 def describe_mcp_purpose(server_name: str, srv: dict) -> str:
     """生成可读的 MCP 用途描述（结构化 token，供 UI 本地化）。
 

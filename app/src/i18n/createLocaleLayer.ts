@@ -190,6 +190,52 @@ function localizeUpgradeAdviceText(
   return advice;
 }
 
+function localizeAgentUpdateDetailPart(t: TFn, part: string, isEn: boolean): string {
+  const p = part.trim();
+  if (!p) return p;
+
+  let m = p.match(/^registry 最新\s*(.+)$/i);
+  if (m) return t("data.agentUpdateDetail.registryLatest", { version: m[1].trim() });
+
+  m = p.match(/^git 落后\s*(\d+)$/);
+  if (m) return t("data.agentUpdateDetail.gitBehind", { count: m[1] });
+
+  m = p.match(/^PyPI 最新\s*(.+)$/i);
+  if (m) return t("data.agentUpdateDetail.pypiLatest", { version: m[1].trim() });
+
+  m = p.match(/^落后 origin\/main\s*(\d+)\s*个 commit$/);
+  if (m) return t("data.agentUpdateDetail.originMainBehind", { count: m[1] });
+
+  if (p === "有新版本可用") return t("data.agentUpdateDetail.newVersionAvailable");
+
+  if (isEn) {
+    m = p.match(/^Registry latest\s*(.+)$/i);
+    if (m) return t("data.agentUpdateDetail.registryLatest", { version: m[1].trim() });
+    m = p.match(/^PyPI latest\s*(.+)$/i);
+    if (m) return t("data.agentUpdateDetail.pypiLatest", { version: m[1].trim() });
+    m = p.match(/^Git behind\s*(\d+)$/i);
+    if (m) return t("data.agentUpdateDetail.gitBehind", { count: m[1] });
+    m = p.match(/^(\d+)\s+commits?\s+behind origin\/main$/i);
+    if (m) return t("data.agentUpdateDetail.originMainBehind", { count: m[1] });
+    if (/new version available/i.test(p)) return t("data.agentUpdateDetail.newVersionAvailable");
+    if (hasCjk(p)) return t("data.engineText.fallback");
+  }
+
+  return p;
+}
+
+function localizeAgentUpdateDetail(t: TFn, detail: string, isEn: boolean): string {
+  if (!detail.trim()) return detail;
+  const sep = " · ";
+  if (detail.includes(sep)) {
+    return detail
+      .split(sep)
+      .map((part) => localizeAgentUpdateDetailPart(t, part, isEn))
+      .join(sep);
+  }
+  return localizeAgentUpdateDetailPart(t, detail, isEn);
+}
+
 function localizeEvidence(t: TFn, evidence: string): string {
   if (!evidence) return evidence;
   const snippetLabel = t("data.evidence.matchedSnippet");
@@ -275,6 +321,10 @@ export const createLocaleLayer: LocaleLayerFactory = (locale: Locale, t: TFn): L
 
     agentDescription(description: string) {
       return description;
+    },
+
+    agentUpdateDetail(detail: string) {
+      return localizeAgentUpdateDetail(t, detail, isEn);
     },
 
     assetPurpose(purpose: string) {

@@ -1,17 +1,32 @@
 import React from "react";
 import { useApp } from "../store";
-import { assetCounts, assetsByAgent, agentHue } from "../selectors";
 import {
+  activeThreatCount,
+  agentSecurityScore,
+  assetCounts,
+  assetsByAgent,
+  agentHue,
+  cveForAgent,
+} from "../selectors";
+import {
+  IconAlert,
   IconBolt,
+  IconBook,
   IconChevron,
   IconCube,
   IconHexAgent,
   IconLayers,
-  IconPlug,
+  IconShield,
 } from "../components/Icons";
 
+function scoreColor(score: number): string {
+  if (score < 60) return "var(--high)";
+  if (score < 80) return "var(--med)";
+  return "var(--safe)";
+}
+
 export function AgentList() {
-  const { snapshot, navigate, startScan, t, layer } = useApp();
+  const { snapshot, navigate, startScan, t } = useApp();
 
   if (!snapshot) {
     return (
@@ -40,48 +55,69 @@ export function AgentList() {
 
       <div className="card" style={{ padding: "18px 24px", margin: "18px 0 18px" }}>
         <div className="row" style={{ justifyContent: "space-around" }}>
-          <SummaryStat icon={<IconLayers size={22} />} value={ac.agents} label="Agents" />
-          <SummaryStat icon={<IconCube size={22} />} value={ac.mcp} label="MCP" />
-          <SummaryStat icon={<IconBolt size={22} />} value={ac.skills} label="Skills" />
+          <SummaryStat icon={<IconLayers size={22} />} value={ac.agents} label={t("agentList.statAgents")} />
+          <SummaryStat icon={<IconCube size={22} />} value={ac.mcp} label={t("agentList.statMcp")} />
+          <SummaryStat icon={<IconBolt size={22} />} value={ac.skills} label={t("agentList.statSkills")} />
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="agent-list-grid">
         {snapshot.agents.map((agent) => {
           const assets = assetsByAgent(snapshot, agent.id);
+          const components = assets.length;
           const mcp = assets.filter((a) => a.type === "mcp").length;
           const skills = assets.filter((a) => a.type === "skill").length;
-          const updatable = assets.filter((a) => a.status === "updatable").length;
+          const knowledge = assets.filter((a) => a.type === "knowledge").length;
+          const threats = activeThreatCount(snapshot, agent.id);
+          const vulnCount = cveForAgent(snapshot, agent.id).filter((c) => c.cves.length > 0).length;
+          const score = agentSecurityScore(snapshot, agent.id);
           const hue = agentHue(agent.kind);
           return (
-            <div key={agent.id} className="card" style={{ padding: 22 }}>
-              <div className="row" style={{ gap: 14 }}>
-                <IconHexAgent size={48} hue={hue} />
-                <div>
-                  <div className="row" style={{ gap: 10 }}>
-                    <span style={{ fontSize: 20, fontWeight: 700 }}>{agent.name}</span>
-                    <span className="ver-badge">{agent.version}</span>
-                  </div>
-                  <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-                    {layer.agentDescription(agent.description)}
-                  </div>
+            <div key={agent.id} className="card agent-card">
+              <div className="agent-card-head">
+                <IconHexAgent size={44} hue={hue} />
+                <div className="agent-card-title">
+                  <span className="agent-card-name">{agent.name}</span>
+                  {agent.version && (
+                    <span className="agent-card-version dim">
+                      {t("agentList.cardVersion", { version: agent.version })}
+                    </span>
+                  )}
                 </div>
+                <AgentCardScore score={score} label={t("agentList.statScore")} />
               </div>
 
-              <div className="row" style={{ gap: 38, margin: "22px 0 20px" }}>
-                <MiniStat icon={<IconCube size={18} />} value={mcp} label="MCP" />
-                <MiniStat icon={<IconBolt size={18} />} value={skills} label="Skills" />
-                <MiniStat
-                  icon={<IconPlug size={18} />}
-                  value={updatable}
-                  label={t("agentList.pendingUpdate")}
-                  highlight={updatable > 0}
+              <div className="agent-card-stats">
+                <CardStat
+                  icon={<IconLayers size={15} />}
+                  value={components}
+                  label={t("agentList.statComponents")}
+                />
+                <CardStat
+                  icon={<IconShield size={15} />}
+                  value={threats}
+                  label={t("agentList.statThreats")}
+                  highlight={threats > 0}
+                  highlightColor="var(--high)"
+                />
+                <CardStat
+                  icon={<IconAlert size={15} />}
+                  value={vulnCount}
+                  label={t("agentList.statCve")}
+                  highlight={vulnCount > 0}
+                  highlightColor="var(--high)"
+                />
+                <CardStat icon={<IconCube size={15} />} value={mcp} label={t("agentList.statMcp")} />
+                <CardStat icon={<IconBolt size={15} />} value={skills} label={t("agentList.statSkills")} />
+                <CardStat
+                  icon={<IconBook size={15} />}
+                  value={knowledge}
+                  label={t("agentWorkbench.assetKnowledge")}
                 />
               </div>
 
               <button
-                className="btn btn-primary"
-                style={{ width: "100%", padding: "13px" }}
+                className="btn btn-primary agent-card-enter"
                 onClick={() => navigate({ name: "agent-workbench", agentId: agent.id })}
               >
                 <span className="row" style={{ gap: 8, justifyContent: "center" }}>
@@ -130,25 +166,57 @@ function SummaryStat({
   );
 }
 
-function MiniStat({
+function AgentCardScore({ score, label }: { score: number; label: string }) {
+  const color = scoreColor(score);
+  const r = 18;
+  const circumference = 2 * Math.PI * r;
+  const pct = score / 100;
+
+  return (
+    <div className="agent-card-score" aria-label={`${label} ${score}`}>
+      <div className="agent-card-score-ring">
+        <svg viewBox="0 0 44 44" aria-hidden>
+          <circle cx="22" cy="22" r={r} fill="none" className="score-gauge-track" strokeWidth="3.5" />
+          <circle
+            cx="22"
+            cy="22"
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth="3.5"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={circumference * (1 - pct)}
+          />
+        </svg>
+        <span className="agent-card-score-num" style={{ color }}>
+          {score}
+        </span>
+      </div>
+      <span className="agent-card-score-label dim">{label}</span>
+    </div>
+  );
+}
+
+function CardStat({
   icon,
   value,
   label,
   highlight,
+  highlightColor = "var(--safe)",
 }: {
   icon: React.ReactNode;
   value: number;
   label: string;
   highlight?: boolean;
+  highlightColor?: string;
 }) {
   return (
-    <div className="row" style={{ gap: 9 }}>
-      <span style={{ color: highlight ? "var(--safe)" : "var(--purple-2)" }}>{icon}</span>
+    <div className="agent-card-stat">
+      <span style={{ color: highlight ? highlightColor : "var(--purple-2)" }}>{icon}</span>
       <div>
-        <div style={{ fontSize: 18, fontWeight: 700 }}>{value}</div>
-        <div className="dim" style={{ fontSize: 11 }}>
-          {label}
-        </div>
+        <div className="agent-card-stat-value">{value}</div>
+        <div className="agent-card-stat-label dim">{label}</div>
       </div>
     </div>
   );

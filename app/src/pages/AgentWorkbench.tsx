@@ -412,8 +412,8 @@ function Overview({
   ];
 
   const assetStats = [
-    { value: mcp, label: "MCP", color: "var(--purple-2)" },
-    { value: skills, label: "Skills", color: "var(--purple-2)" },
+    { value: mcp, label: t("agentWorkbench.assetMcp"), color: "var(--purple-2)" },
+    { value: skills, label: t("agentWorkbench.assetSkills"), color: "var(--purple-2)" },
     { value: knowledge, label: t("agentWorkbench.assetKnowledge"), color: "var(--purple-2)" },
     { value: channels, label: t("agentWorkbench.assetChannel"), color: "var(--purple-2)" },
   ];
@@ -443,7 +443,10 @@ function Overview({
           <MetaCell label={t("agentWorkbench.currentVersion")} value={agent.version || "—"} />
           <MetaCell label={t("agentWorkbench.latestVersion")} value={latestVer} highlight={!versionUpToDate} />
           {agent.update_detail && !versionUpToDate && (
-            <MetaCell label={t("agentWorkbench.updateDetail")} value={agent.update_detail} />
+            <MetaCell
+              label={t("agentWorkbench.updateDetail")}
+              value={layer.agentUpdateDetail(agent.update_detail)}
+            />
           )}
           <MetaCell label={t("agentWorkbench.listenPorts")} value={ports} mono />
         </div>
@@ -1157,7 +1160,7 @@ function RuntimePanel({ agentId }: { agentId: string }) {
       </div>
       <div className="runtime-metrics">
         <RuntimeMetric
-          label="CPU"
+          label={t("agentWorkbench.cpu")}
           value={r ? `${r.cpu_percent}% / 100%` : "—"}
           percent={r?.cpu_percent ?? 0}
           max={100}

@@ -183,6 +183,14 @@ const zh = {
     scanNow: "立即扫描",
     pendingUpdate: "待更新",
     enter: "进入",
+    statAgents: "Agents",
+    statMcp: "MCP",
+    statSkills: "Skills",
+    statComponents: "组件",
+    statThreats: "威胁",
+    statCve: "CVE",
+    statScore: "评分",
+    cardVersion: "版本 {version}",
   },
   agentWorkbench: {
     notFound: "未找到该 Agent。",
@@ -241,6 +249,7 @@ const zh = {
     runtimeTitle: "资源占用",
     refreshRuntimeTitle: "刷新资源占用",
     memory: "内存",
+    cpu: "CPU",
     disk: "磁盘",
     trendTitle: "最近多次刷新的占用趋势",
     trendLabel: "近期波动",
@@ -447,6 +456,13 @@ const zh = {
     permissionSource: {
       agentDefault: "Agent 默认",
     },
+    agentUpdateDetail: {
+      registryLatest: "registry 最新 {version}",
+      pypiLatest: "PyPI 最新 {version}",
+      gitBehind: "git 落后 {count}",
+      originMainBehind: "落后 origin/main {count} 个 commit",
+      newVersionAvailable: "有新版本可用",
+    },
     upgradeAdvice: {
       noUpgradeNeeded: "暂无需升级。",
       noOfficialFix: "暂无官方修复版本，建议关注上游更新或评估替代组件。",
@@ -495,6 +511,7 @@ const zh = {
       "ATR-2025-00085": "未启用审计日志",
     },
     riskChartEmpty: "暂无暴露面风险类别",
+    riskChartTotal: "风险项",
   },
   errors: {
     scanFailed: "扫描失败",
@@ -697,6 +714,14 @@ const en: StringTree<typeof zh> = {
     scanNow: "Scan now",
     pendingUpdate: "Updates pending",
     enter: "Open",
+    statAgents: "Agents",
+    statMcp: "MCP",
+    statSkills: "Skills",
+    statComponents: "Components",
+    statThreats: "Threats",
+    statCve: "CVE",
+    statScore: "Score",
+    cardVersion: "Version {version}",
   },
   agentWorkbench: {
     notFound: "Agent not found.",
@@ -755,6 +780,7 @@ const en: StringTree<typeof zh> = {
     runtimeTitle: "Resource usage",
     refreshRuntimeTitle: "Refresh resource usage",
     memory: "Memory",
+    cpu: "CPU",
     disk: "Disk",
     trendTitle: "Usage trend (recent refreshes)",
     trendLabel: "Recent trend",
@@ -978,6 +1004,13 @@ const en: StringTree<typeof zh> = {
     permissionSource: {
       agentDefault: "Agent default",
     },
+    agentUpdateDetail: {
+      registryLatest: "Registry latest {version}",
+      pypiLatest: "PyPI latest {version}",
+      gitBehind: "Git {count} commits behind",
+      originMainBehind: "{count} commits behind origin/main",
+      newVersionAvailable: "New version available",
+    },
     upgradeAdvice: {
       noUpgradeNeeded: "No upgrade needed.",
       noOfficialFix: "No official fix yet. Watch upstream releases or evaluate alternatives.",
@@ -1028,6 +1061,7 @@ const en: StringTree<typeof zh> = {
       "ATR-2025-00085": "Audit logging disabled",
     },
     riskChartEmpty: "No exposure categories yet",
+    riskChartTotal: "Findings",
   },
   errors: {
     scanFailed: "Scan failed",
