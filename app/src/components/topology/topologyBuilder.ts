@@ -61,10 +61,20 @@ function countHV(threats: any[]) {
   return { h, m };
 }
 
+export interface TopologyLabels {
+  knowledge: string;
+  channel: string;
+  permissions: string;
+  component: string;
+  cveVuln: string;
+  threat: string;
+}
+
 export function buildTopology(
   snapshot: ScanSnapshot,
   agentId: string,
-  agentLabel: string
+  agentLabel: string,
+  labels: TopologyLabels
 ): TopoGraph {
   const assets = assetsByAgent(snapshot, agentId);
   const allThreats = exposureForAgent(snapshot, agentId).filter((t) => !isThreatIgnored(snapshot, t));
@@ -97,14 +107,14 @@ export function buildTopology(
   // ---- Knowledge ----
   const know = assets.filter((a) => a.type === "knowledge");
   if (know.length) {
-    nodes.push({ id: "cat:knowledge", type: "category", label: "知识库", count: know.length, color: "#14B8A6", icon: `${ICONS}/knowledge.png` });
+    nodes.push({ id: "cat:knowledge", type: "category", label: labels.knowledge, count: know.length, color: "#14B8A6", icon: `${ICONS}/knowledge.png` });
     edges.push({ id: "e:know-agent", source: "cat:knowledge", target: "agent", sourceHandle: "bottom", targetHandle: "top" });
   }
 
   // ---- Channel ----
   const ch = assets.filter((a) => a.type === "channel");
   if (ch.length) {
-    nodes.push({ id: "cat:channel", type: "category", label: "通道", count: ch.length, color: C.cyan, icon: `${ICONS}/channel.png` });
+    nodes.push({ id: "cat:channel", type: "category", label: labels.channel, count: ch.length, color: C.cyan, icon: `${ICONS}/channel.png` });
     edges.push({ id: "e:channel-agent", source: "cat:channel", target: "agent", sourceHandle: "left", targetHandle: "target-right" });
   }
 
@@ -153,7 +163,7 @@ export function buildTopology(
     }
     const nodeId = `cat:perm-${parentId}`;
     nodes.push({
-      id: nodeId, type: "category", label: "权限", count: perms.length,
+      id: nodeId, type: "category", label: labels.permissions, count: perms.length,
       color: C.yellow, icon: `${ICONS}/perm.png`,
       permHigh: pH, permMed: pM,
     });
@@ -180,7 +190,7 @@ export function buildTopology(
   const deps = assets.filter((a) => a.type === "dependency");
   if (deps.length) {
     nodes.push({
-      id: "cat:dependency", type: "component", label: "组件", count: deps.length,
+      id: "cat:dependency", type: "component", label: labels.component, count: deps.length,
       color: C.gray, icon: `${ICONS}/component.png`,
     });
     edges.push({ id: "e:agent-dep", source: "agent", target: "cat:dependency", sourceHandle: "bottom", targetHandle: "top" });
@@ -188,7 +198,7 @@ export function buildTopology(
 
   // ---- CVE ----
   if (totalCve > 0) {
-    nodes.push({ id: "risk:cve", type: "risk", label: "CVE 漏洞", count: totalCve, color: C.orange, icon: `${ICONS}/cve.png`, status: "risk" });
+    nodes.push({ id: "risk:cve", type: "risk", label: labels.cveVuln, count: totalCve, color: C.orange, icon: `${ICONS}/cve.png`, status: "risk" });
     edges.push({ id: "e:cve", source: "cat:dependency", target: "risk:cve", sourceHandle: "bottom", targetHandle: "top", dashed: true, risk: true });
   }
 
@@ -200,7 +210,7 @@ export function buildTopology(
   function addThreatNode(id: string, threats: any[], parent: string) {
     if (!threats.length) return;
     const { h, m: med } = countHV(threats);
-    nodes.push({ id, type: "risk", label: "威胁", count: threats.length, color: C.red, icon: `${ICONS}/risk.png`, threatHigh: h, threatMed: med, status: "risk" });
+    nodes.push({ id, type: "risk", label: labels.threat, count: threats.length, color: C.red, icon: `${ICONS}/risk.png`, threatHigh: h, threatMed: med, status: "risk" });
     edges.push({ id: `e:threat-${id}`, source: parent, target: id, sourceHandle: "bottom", targetHandle: "top", dashed: true, risk: true });
   }
 

@@ -2,6 +2,7 @@ import React, { useMemo, useCallback, useRef } from "react";
 import ReactFlow, { type Edge, type Node, Controls } from "reactflow";
 import "reactflow/dist/style.css";
 import type { ScanSnapshot } from "../../types";
+import { useApp } from "../../store";
 import { buildTopology, type TopoNode } from "./topologyBuilder";
 import { topoNodeTypes } from "./TopologyNodes";
 import "./topology.css";
@@ -91,7 +92,22 @@ interface SituationTopologyProps {
 }
 
 export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }: SituationTopologyProps) {
-  const topo = useMemo(() => buildTopology(snapshot, agentId, agentLabel), [snapshot, agentId, agentLabel]);
+  const { t } = useApp();
+  const topoLabels = useMemo(
+    () => ({
+      knowledge: t("topology.knowledge"),
+      channel: t("topology.channel"),
+      permissions: t("topology.permissions"),
+      component: t("topology.component"),
+      cveVuln: t("topology.cveVuln"),
+      threat: t("topology.threat"),
+    }),
+    [t]
+  );
+  const topo = useMemo(
+    () => buildTopology(snapshot, agentId, agentLabel, topoLabels),
+    [snapshot, agentId, agentLabel, topoLabels]
+  );
 
   const visibleNodeIds = useMemo(() => new Set(topo.nodes.map((n) => n.id)), [topo.nodes]);
   const visibleEdges = useMemo(() => {
@@ -186,8 +202,8 @@ export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }:
         <Controls className="topo-controls" showInteractive={false} />
       </ReactFlow>
       <div className="topo-legend">
-        <span className="topo-legend-item"><span className="topo-legend-line solid" />结构连接</span>
-        <span className="topo-legend-item"><span className="topo-legend-line dashed risk" />风险路径</span>
+        <span className="topo-legend-item"><span className="topo-legend-line solid" />{t("topology.legendStructure")}</span>
+        <span className="topo-legend-item"><span className="topo-legend-line dashed risk" />{t("topology.legendRiskPath")}</span>
       </div>
     </div>
   );

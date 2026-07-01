@@ -1,5 +1,6 @@
 import React from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
+import { useApp } from "../../store";
 import type { TopoNode } from "./topologyBuilder";
 
 function nodeBackground(hex?: string): string {
@@ -78,6 +79,7 @@ export const CategoryNode = ({ id, data }: NodeProps<TopoNode>) => {
 
 /* Risk */
 export const RiskNode = ({ id, data }: NodeProps<TopoNode>) => {
+  const { t } = useApp();
   const { label, color, count, threatHigh, threatMed, icon } = data;
   return (
     <div data-topo-id={id} className="topo-node topo-risk" style={{ borderColor: color, background: nodeBackground(color), width: 172, height: 68 }}>
@@ -90,8 +92,12 @@ export const RiskNode = ({ id, data }: NodeProps<TopoNode>) => {
       </div>
       {(threatHigh != null || threatMed != null) && (
         <div className="topo-risk-tags">
-          {threatHigh != null && threatHigh > 0 && <span className="topo-risk-tag high">{threatHigh} 高</span>}
-          {threatMed != null && threatMed > 0 && <span className="topo-risk-tag med">{threatMed} 中</span>}
+          {threatHigh != null && threatHigh > 0 && (
+            <span className="topo-risk-tag high">{threatHigh} {t("topology.severityHighShort")}</span>
+          )}
+          {threatMed != null && threatMed > 0 && (
+            <span className="topo-risk-tag med">{threatMed} {t("topology.severityMedShort")}</span>
+          )}
         </div>
       )}
     </div>

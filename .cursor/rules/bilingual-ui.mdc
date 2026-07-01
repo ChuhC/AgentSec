@@ -1,0 +1,34 @@
+---
+description: All UI changes must support Chinese and English (i18n)
+alwaysApply: true
+---
+
+# Bilingual UI (zh / en)
+
+Every user-visible string in this project must support **简体中文** and **English**.
+
+## Rules
+
+1. **No hardcoded UI copy** in components, pages, or topology builders — use `t("…")` from `useApp()`.
+2. **Add both locales** in `app/src/i18n/messages.ts`: update `zh` and mirror the same keys under `en` (`StringTree<typeof zh>`).
+3. **Prefer reusing existing keys** (e.g. `agentWorkbench.assetKnowledge`) before adding new ones.
+4. **Non-UI identifiers** (internal tab keys, route state, node ids) may stay stable; only **displayed** text needs i18n.
+5. **PR / change checklist**: new or changed UI → keys in `messages.ts` (zh + en) → render via `t()`.
+
+## Example
+
+```tsx
+// ❌ BAD
+<span>结构连接</span>
+
+// ✅ GOOD
+const { t } = useApp();
+<span>{t("topology.legendStructure")}</span>
+```
+
+```ts
+// messages.ts — always add zh and en together
+topology: {
+  legendStructure: "结构连接", // en: "Structure"
+},
+```
