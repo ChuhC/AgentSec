@@ -71,7 +71,7 @@
 
 /* ---- Controls ---- */
 .topo-container .topo-controls {
-  top: 56px;
+  top: 16px;
   right: 16px;
   bottom: auto;
   left: auto;
@@ -167,8 +167,7 @@
   border-radius: 10px;
   border-width: 1px;
   border-style: solid;
-  background: rgba(17, 19, 34, 0.86);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(6px);
   cursor: pointer;
   position: relative;
   overflow: hidden;
@@ -223,19 +222,20 @@
   text-transform: uppercase;
 }
 
-/* ---- Handles ---- */
-.topo-handle {
-  width: 6px !important;
-  height: 6px !important;
-  background: rgba(165, 180, 252, 0.35) !important;
-  border: 1px solid rgba(199, 210, 254, 0.2) !important;
-  border-radius: 50% !important;
-  transition: all 0.2s;
+/* ---- Handles：保留连线锚点，视觉隐藏 ---- */
+.topo-container .react-flow__handle.topo-handle {
+  opacity: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  pointer-events: none !important;
 }
-.topo-handle:hover {
-  background: rgba(199, 210, 254, 0.75) !important;
-  border-color: rgba(199, 210, 254, 0.5) !important;
-  box-shadow: 0 0 6px rgba(165, 180, 252, 0.6);
+.topo-handle {
+  opacity: 0 !important;
 }
 
 /* ---- Node Icons ---- */
@@ -263,16 +263,12 @@
   border-radius: 50px;
   border-width: 1.5px;
   border-color: #A855F7;
-  box-shadow:
-    0 0 24px rgba(168, 85, 247, 0.25),
-    inset 0 0 30px rgba(168, 85, 247, 0.05);
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.22);
 }
 
 .topo-agent:hover {
   transform: translateY(-2px) scale(1.05);
-  box-shadow:
-    0 0 36px rgba(168, 85, 247, 0.4),
-    inset 0 0 40px rgba(168, 85, 247, 0.08);
+  box-shadow: 0 0 32px rgba(168, 85, 247, 0.38);
   border-color: #C084FC;
 }
 
@@ -291,19 +287,6 @@
   cursor: pointer;
   border-radius: 10px;
   position: relative;
-}
-
-/* left accent bar */
-.topo-category::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 6px;
-  bottom: 6px;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: currentColor;
-  opacity: 0.8;
 }
 
 .topo-category:hover {
@@ -366,21 +349,6 @@
   border-width: 1.5px;
 }
 
-.topo-component::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 10px;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 8px,
-    rgba(148, 163, 184, 0.015) 8px,
-    rgba(148, 163, 184, 0.015) 9px
-  );
-}
-
 .topo-component:hover {
   box-shadow:
     0 0 18px rgba(129, 140, 248, 0.16),
@@ -422,32 +390,8 @@
 }
 
 @keyframes riskPulse {
-  0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.12), inset 0 0 12px rgba(239, 68, 68, 0.04); }
-  50%      { box-shadow: 0 0 22px rgba(239, 68, 68, 0.24), inset 0 0 22px rgba(239, 68, 68, 0.07); }
-}
-
-/* risk corner brackets */
-.topo-risk::before {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 9px;
-  height: 9px;
-  border-top: 1.5px solid rgba(239, 68, 68, 0.45);
-  border-left: 1.5px solid rgba(239, 68, 68, 0.45);
-  pointer-events: none;
-}
-.topo-risk::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 9px;
-  height: 9px;
-  border-top: 1.5px solid rgba(239, 68, 68, 0.45);
-  border-right: 1.5px solid rgba(239, 68, 68, 0.45);
-  pointer-events: none;
+  0%, 100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.12); }
+  50%      { box-shadow: 0 0 20px rgba(239, 68, 68, 0.22); }
 }
 
 .topo-risk-tags {

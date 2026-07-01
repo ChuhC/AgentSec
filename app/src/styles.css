@@ -2137,6 +2137,13 @@ html[data-platform="win32"] .sidebar {
   border-color: #fef08a;
   box-shadow: 0 0 12px rgba(250, 204, 21, 0.55);
 }
+.permission-matrix-cell-readonly {
+  cursor: default;
+  pointer-events: none;
+}
+.permission-matrix-cell-readonly:hover {
+  transform: none;
+}
 .permission-matrix-empty {
   color: var(--text-3);
   font-size: 12px;

@@ -2,18 +2,27 @@ import React from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 import type { TopoNode } from "./topologyBuilder";
 
-function hexToBg(hex: string): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, 0.18)`;
+function nodeBackground(hex?: string): string {
+  const h = hex && /^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : "#6366F1";
+  const r = parseInt(h.slice(1, 3), 16);
+  const g = parseInt(h.slice(3, 5), 16);
+  const b = parseInt(h.slice(5, 7), 16);
+  const baseR = 20, baseG = 22, baseB = 38;
+  const mix = 0.22;
+  const mr = Math.round(baseR + (r - baseR) * mix);
+  const mg = Math.round(baseG + (g - baseG) * mix);
+  const mb = Math.round(baseB + (b - baseB) * mix);
+  return `rgb(${mr}, ${mg}, ${mb})`;
 }
+
+/** @deprecated 兼容旧引用，与 nodeBackground 相同 */
+const hexToBg = nodeBackground;
 
 /* Agent */
 export const AgentNode = ({ id, data }: NodeProps<TopoNode>) => {
   const { label, color, icon } = data;
   return (
-    <div data-topo-id={id} className="topo-node topo-agent" style={{ borderColor: color, background: `linear-gradient(135deg, ${hexToBg(color)} 0%, rgba(17,19,34,0.92) 100%)`, width: 184, height: 64 }}>
+    <div data-topo-id={id} className="topo-node topo-agent" style={{ borderColor: color, background: nodeBackground(color), width: 184, height: 64 }}>
       <Handle type="target" position={Position.Top} id="top" className="topo-handle" />
       <Handle type="target" position={Position.Left} id="left" className="topo-handle" />
       <Handle type="target" position={Position.Right} id="target-right" className="topo-handle" />
@@ -28,16 +37,13 @@ export const AgentNode = ({ id, data }: NodeProps<TopoNode>) => {
 
 /* Category（含组件节点：用 category 类型注册以兼容 ReactFlow 点击事件） */
 export const CategoryNode = ({ id, data }: NodeProps<TopoNode>) => {
-  const { label, color, count, icon, cveCount, status } = data;
-  const isComponent = cveCount != null;
-  const isRisk = status === "risk";
-  const sc = isRisk ? "#F87171" : "#34D399";
-  const st = cveCount != null && cveCount > 0 ? `${cveCount} CVE` : "0 CVE";
-  const bg = `linear-gradient(135deg, ${hexToBg(color)} 0%, rgba(17,19,34,0.92) 100%)`;
+  const { label, color, count, icon, type } = data;
+  const isComponent = type === "component";
+  const bg = nodeBackground(color);
 
   if (isComponent) {
     return (
-      <div data-topo-id={id} className="topo-node topo-component" style={{ borderColor: color, background: bg, width: 164, height: 72 }}>
+      <div data-topo-id={id} className="topo-node topo-component" style={{ borderColor: color, background: bg, width: 164, height: 50 }}>
         <Handle type="target" position={Position.Top} id="top" className="topo-handle" />
         <Handle type="source" position={Position.Bottom} id="bottom" className="topo-handle" />
         <div className="topo-category-body">
@@ -47,7 +53,6 @@ export const CategoryNode = ({ id, data }: NodeProps<TopoNode>) => {
             {count != null && <span className="topo-count">×{count}</span>}
           </div>
         </div>
-        <div className={`topo-cve-shield ${isRisk ? "risk" : "safe"}`} style={{ color: sc }}><span>&#x1f6e1;</span>{st}</div>
       </div>
     );
   }
@@ -75,7 +80,7 @@ export const CategoryNode = ({ id, data }: NodeProps<TopoNode>) => {
 export const RiskNode = ({ id, data }: NodeProps<TopoNode>) => {
   const { label, color, count, threatHigh, threatMed, icon } = data;
   return (
-    <div data-topo-id={id} className="topo-node topo-risk" style={{ borderColor: color, background: `linear-gradient(135deg, ${hexToBg(color)} 0%, rgba(17,19,34,0.94) 100%)`, width: 172, height: 68 }}>
+    <div data-topo-id={id} className="topo-node topo-risk" style={{ borderColor: color, background: nodeBackground(color), width: 172, height: 68 }}>
       <Handle type="target" position={Position.Top} id="top" className="topo-handle" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="topo-handle" />
       <div className="topo-category-body">

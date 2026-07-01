@@ -835,15 +835,6 @@ function PermissionManagementTab({
     );
   };
 
-  const selectCell = (rowKey: string, category: string, perms: PermissionEntry[]) => {
-    if (!perms.length) return;
-    setSelection((prev) =>
-      prev?.kind === "cell" && prev.rowKey === rowKey && prev.category === category
-        ? null
-        : { kind: "cell", rowKey, category }
-    );
-  };
-
   return (
     <div className="permission-list-embedded">
       <div className="dim" style={{ fontSize: 12.5, marginBottom: 6 }}>
@@ -939,23 +930,17 @@ function PermissionManagementTab({
                         {RADAR_CATS.map((cat) => {
                           const cellPerms = permissionsForMatrixCell(row.group, cat);
                           const hasPerm = cellPerms.length > 0;
-                          const cellSelected =
-                            selection?.kind === "cell" &&
-                            selection.rowKey === row.key &&
-                            selection.category === cat;
                           return (
                             <td key={cat} className="permission-matrix-cat-col">
                               {hasPerm ? (
-                                <button
-                                  type="button"
-                                  className={`permission-matrix-cell has-perm${cellSelected ? " active" : ""}`}
+                                <span
+                                  className="permission-matrix-cell has-perm permission-matrix-cell-readonly"
                                   title={t("agentWorkbench.permissionGroupCount", {
                                     count: cellPerms.length,
                                   })}
-                                  onClick={() => selectCell(row.key, cat, cellPerms)}
                                 >
                                   {cellPerms.length > 1 ? cellPerms.length : ""}
-                                </button>
+                                </span>
                               ) : (
                                 <span className="permission-matrix-empty">—</span>
                               )}
