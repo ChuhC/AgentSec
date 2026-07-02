@@ -420,12 +420,14 @@ const AGENT_RADAR_COLORS: Record<string, { color: string; fill: string }> = {
   hermes: { color: "#a855f7", fill: "rgba(139,92,246,0.22)" },
   openclaw: { color: "#60a5fa", fill: "rgba(96,165,250,0.22)" },
   claude: { color: "#f97316", fill: "rgba(249,115,22,0.22)" },
+  codex: { color: "#10b981", fill: "rgba(16,185,129,0.22)" },
 };
 
 export const AGENT_HUE: Record<string, string> = {
   hermes: "#a855f7",
   openclaw: "#60a5fa",
   claude: "#f97316",
+  codex: "#10b981",
 };
 
 export function agentHue(kind: string): string {

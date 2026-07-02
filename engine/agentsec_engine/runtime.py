@@ -15,6 +15,7 @@ from typing import Dict, List, Optional
 from .discovery import parsers
 from .discovery.base import AgentAdapter
 from .discovery.claude import ClaudeAdapter
+from .discovery.codex import CodexAdapter
 from .discovery.hermes import HermesAdapter
 from .discovery.openclaw import OpenClawAdapter
 
@@ -25,6 +26,7 @@ _ADAPTER_BY_KIND = {
     "hermes": HermesAdapter,
     "openclaw": OpenClawAdapter,
     "claude": ClaudeAdapter,
+    "codex": CodexAdapter,
 }
 
 
@@ -78,7 +80,9 @@ def _find_pids(agent_kind: str, ports: List[str]) -> List[int]:
     if pids:
         return list(dict.fromkeys(pids))
     # 回退：按进程名模糊匹配
-    pattern = "hermes" if agent_kind == "hermes" else "openclaw"
+    pattern = {"hermes": "hermes", "openclaw": "openclaw", "claude": "claude", "codex": "codex"}.get(
+        agent_kind, agent_kind
+    )
     out = _run(["ps", "-ax", "-o", "pid=,command="])
     for line in out.splitlines():
         m = re.match(r"\s*(\d+)\s+(.*)", line)

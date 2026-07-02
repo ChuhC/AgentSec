@@ -288,6 +288,43 @@ def check_claude_update(
     )
 
 
+def check_codex_update(
+    *,
+    online: bool = True,
+    current_version: str = "",
+) -> AgentUpdateInfo:
+    """Codex：CLI 版本 + npm registry @openai/codex。"""
+    from .discovery.codex import resolve_codex_installed_version
+
+    current = _normalize_version(current_version) or _normalize_version(
+        resolve_codex_installed_version()
+    )
+    if not online:
+        return AgentUpdateInfo(
+            current_version=current,
+            latest_version=current,
+        )
+
+    latest = fetch_npm_latest("@openai/codex") or current
+    update_available = bool(latest and current and _is_newer(latest, current))
+    cli = shutil.which("codex")
+    app_cli = "/Applications/Codex.app/Contents/Resources/codex"
+    if not cli and os.path.isfile(app_cli):
+        cli = app_cli
+    update_command = "codex update" if cli else "npm install -g @openai/codex@latest"
+    can_update = bool(cli or shutil.which("npm"))
+
+    return AgentUpdateInfo(
+        update_available=update_available,
+        current_version=current,
+        latest_version=latest if update_available else current,
+        update_method="npm",
+        can_update=can_update and update_available,
+        update_command=update_command,
+        detail=f"registry 最新 {latest}" if update_available else "",
+    )
+
+
 def apply_update_info(agent, info: AgentUpdateInfo) -> None:
     """将 AgentUpdateInfo 写入 Agent 模型。"""
     if info.current_version:

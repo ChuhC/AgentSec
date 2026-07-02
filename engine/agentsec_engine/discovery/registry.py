@@ -8,10 +8,11 @@ from ..enrichment import enrich_discovery
 from ..models import Agent, Asset
 from .base import AgentAdapter
 from .claude import ClaudeAdapter
+from .codex import CodexAdapter
 from .hermes import HermesAdapter
 from .openclaw import OpenClawAdapter
 
-ADAPTERS = [HermesAdapter, OpenClawAdapter, ClaudeAdapter]
+ADAPTERS = [HermesAdapter, OpenClawAdapter, ClaudeAdapter, CodexAdapter]
 
 _ADAPTER_BY_KIND = {cls.kind: cls for cls in ADAPTERS}
 

@@ -10,6 +10,7 @@ from .registry_client import fetch_npm_latest, fetch_pypi_latest
 from .update_check import (
     apply_update_info,
     check_claude_update,
+    check_codex_update,
     check_hermes_update,
     check_openclaw_update,
 )
@@ -81,6 +82,14 @@ def enrich_agent(
         if resolved:
             agent.version = resolved
         info = check_claude_update(online=online, current_version=agent.version)
+        apply_update_info(agent, info)
+    elif agent.kind == "codex":
+        from .discovery.codex import resolve_codex_installed_version
+
+        resolved = resolve_codex_installed_version()
+        if resolved:
+            agent.version = resolved
+        info = check_codex_update(online=online, current_version=agent.version)
         apply_update_info(agent, info)
     elif agent.latest_version is None and agent.version:
         agent.latest_version = agent.version

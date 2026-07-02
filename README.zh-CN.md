@@ -15,7 +15,7 @@
 
 **早期预览** — 功能仍在快速迭代，界面与接口可能调整。欢迎 Issue / PR 反馈与共建。
 
-AgentSec 是以 **macOS 为主平台** 的桌面安全工具，面向本机 **AI Agent** 做安全体检。目前已适配 **Hermes**、**OpenClaw**、**Claude Code**，并将持续扩展更多 Agent。它不替代你的 Agent，而是在旁边做一轮「体检」：扫配置与技能里的风险、查依赖里的已知漏洞，并让你在同一界面里管理 MCP、Skills、知识库与组件 — **数据不出本机，无遥测，无账号**。
+AgentSec 是以 **macOS 为主平台** 的桌面安全工具，面向本机 **AI Agent** 做安全体检。目前已适配 **Hermes**、**OpenClaw**、**Claude Code**、**Codex**，并将持续扩展更多 Agent。它不替代你的 Agent，而是在旁边做一轮「体检」：扫配置与技能里的风险、查依赖里的已知漏洞，并让你在同一界面里管理 MCP、Skills、知识库与组件 — **数据不出本机，无遥测，无账号**。
 
 ![扫描结果概览](docs/screenshots/zh/02-results.png)
 
@@ -49,7 +49,7 @@ AgentSec 是以 **macOS 为主平台** 的桌面安全工具，面向本机 **AI
 
 **组件漏洞治理** — 基于 OSV 对 Agent 依赖做版本—CVE 关联，按组件聚合展示 CVSS、影响范围与修复版本；暴露面与 CVE 双管线解耦，CVE 数据源不可达时不阻断暴露面扫描结论。
 
-**资产发现与处置** — 通过各 Agent 适配器（当前含 Hermes、OpenClaw、Claude Code，更多适配持续增加）解析本机 MCP、Skill、知识库及包管理依赖，形成按 Agent 分组的资产清单；支持组件更新、禁用与卸载，关键操作可配置二次确认。
+**资产发现与处置** — 通过各 Agent 适配器（当前含 Hermes、OpenClaw、Claude Code、Codex，更多适配持续增加）解析本机 MCP、Skill、知识库及包管理依赖，形成按 Agent 分组的资产清单；支持组件更新、禁用与卸载，关键操作可配置二次确认。
 
 **权限态势评估** — 汇总 Agent 与挂载资产的权限声明，按文件、Shell、网络、工具、知识库等维度归一化；**权限矩阵**对比各组件能力覆盖，**雷达图**对比多 Agent 权限暴露面，辅助识别高危能力组合。
 
@@ -115,7 +115,7 @@ npm install
 npm run dev
 ```
 
-已支持的 Agent 会从默认安装路径发现（如 `%USERPROFILE%\.hermes`、`%USERPROFILE%\.openclaw`、`%USERPROFILE%\.claude`）；若路径或行为与 macOS 不一致，请提 Issue。
+已支持的 Agent 会从默认安装路径发现（如 `%USERPROFILE%\.hermes`、`%USERPROFILE%\.openclaw`、`%USERPROFILE%\.claude`、`%USERPROFILE%\.codex`）；若路径或行为与 macOS 不一致，请提 Issue。
 
 Electron 下载慢时可设：
 

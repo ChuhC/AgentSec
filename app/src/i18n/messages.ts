@@ -407,6 +407,7 @@ const zh = {
       generalPlanner: "通用智能体，擅长任务规划与工具调用",
       securityResearch: "安全研究专用智能体，专注漏洞分析与利用",
       hermesModel: "通用智能体（模型：{model}）",
+      codexModel: "Codex（模型：{model}）",
     },
     purpose: {
       localSkill: "本机技能",
@@ -442,6 +443,10 @@ const zh = {
       projectAgentRules: "项目级 Agent 规则",
       projectCursorRules: "项目 Cursor/Claude 规则",
       claudeCliMain: "Claude Code CLI 主程序",
+      codexCliMain: "Codex CLI 主程序",
+      codexPlugin: "Codex 插件",
+      codexRules: "Codex 规则配置",
+      codexGlobalRules: "全局 Agent 规则",
     },
     pending: {
       threatHigh: { label: "威胁高危待处理", detail: "安全规则与暴露面发现" },
@@ -977,6 +982,7 @@ const en: StringTree<typeof zh> = {
       generalPlanner: "General agent for planning and tool use",
       securityResearch: "Security research agent focused on vulnerability analysis",
       hermesModel: "General agent (model: {model})",
+      codexModel: "Codex (model: {model})",
     },
     purpose: {
       localSkill: "Local skill",
@@ -1012,6 +1018,10 @@ const en: StringTree<typeof zh> = {
       projectAgentRules: "Project-level agent rules",
       projectCursorRules: "Project Cursor/Claude rules",
       claudeCliMain: "Claude Code CLI main program",
+      codexCliMain: "Codex CLI main program",
+      codexPlugin: "Codex plugin",
+      codexRules: "Codex rules configuration",
+      codexGlobalRules: "Global agent rules",
     },
     pending: {
       threatHigh: { label: "High-severity threats pending", detail: "From security rules and exposure checks" },

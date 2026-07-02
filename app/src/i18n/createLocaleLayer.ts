@@ -91,6 +91,10 @@ const PURPOSE_ZH_TO_KEY: Record<string, string> = {
   "项目级 Agent 规则": "projectAgentRules",
   "项目 Cursor/Claude 规则": "projectCursorRules",
   "Claude Code CLI 主程序": "claudeCliMain",
+  "Codex CLI 主程序": "codexCliMain",
+  "Codex 插件": "codexPlugin",
+  "Codex 规则配置": "codexRules",
+  "全局 Agent 规则": "codexGlobalRules",
 };
 
 /** 引擎 permission.name 固定中文 → data.permissionName 子键 */
@@ -426,6 +430,8 @@ export const createLocaleLayer: LocaleLayerFactory = (locale: Locale, t: TFn): L
       if (key) return t(key);
       const m = description.match(/^通用智能体（模型：(.+)）$/);
       if (m) return t("data.agentDesc.hermesModel", { model: m[1] });
+      const codex = description.match(/^Codex（模型：(.+)）$/);
+      if (codex) return t("data.agentDesc.codexModel", { model: codex[1] });
       if (isEn && hasCjk(description)) return t("data.engineText.fallback");
       return description;
     },
