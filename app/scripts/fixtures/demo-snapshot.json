@@ -335,68 +335,6 @@
       "can_uninstall": true
     },
     {
-      "id": "hermes-kb-github",
-      "agent_id": "hermes",
-      "type": "knowledge",
-      "name": "GitHub Knowledge",
-      "version": "1.0.3",
-      "latest_version": "1.1.0",
-      "status": "updatable",
-      "purpose": "GitHub 仓库知识库",
-      "source": "Hermes",
-      "ecosystem": null,
-      "manager": null,
-      "install_path": null,
-      "package_name": null,
-      "path": null,
-      "config_key": null,
-      "skill_scope": null,
-      "permissions": [
-        {
-          "id": "p-kb-read",
-          "name": "读取知识库内容",
-          "category": "知识库",
-          "source": "knowledge",
-          "source_label": "GitHub Knowledge",
-          "severity": "low"
-        }
-      ],
-      "can_update": true,
-      "can_disable": true,
-      "can_uninstall": true
-    },
-    {
-      "id": "hermes-kb-docs",
-      "agent_id": "hermes",
-      "type": "knowledge",
-      "name": "Docs Knowledge",
-      "version": "1.0.0",
-      "latest_version": null,
-      "status": "enabled",
-      "purpose": "远程文档知识库",
-      "source": "Hermes",
-      "ecosystem": null,
-      "manager": null,
-      "install_path": null,
-      "package_name": null,
-      "path": null,
-      "config_key": null,
-      "skill_scope": null,
-      "permissions": [
-        {
-          "id": "p-kb-dl",
-          "name": "下载远程内容",
-          "category": "知识库",
-          "source": "knowledge",
-          "source_label": "Docs Knowledge",
-          "severity": "low"
-        }
-      ],
-      "can_update": false,
-      "can_disable": true,
-      "can_uninstall": true
-    },
-    {
       "id": "hermes-channel-webchat",
       "agent_id": "hermes",
       "type": "channel",

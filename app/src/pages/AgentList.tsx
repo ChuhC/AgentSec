@@ -11,7 +11,6 @@ import {
 import {
   IconAlert,
   IconBolt,
-  IconBook,
   IconChevron,
   IconCube,
   IconHexAgent,
@@ -67,7 +66,6 @@ export function AgentList() {
           const components = assets.length;
           const mcp = assets.filter((a) => a.type === "mcp").length;
           const skills = assets.filter((a) => a.type === "skill").length;
-          const knowledge = assets.filter((a) => a.type === "knowledge").length;
           const threats = activeThreatCount(snapshot, agent.id);
           const vulnCount = cveForAgent(snapshot, agent.id).filter((c) => c.cves.length > 0).length;
           const score = agentSecurityScore(snapshot, agent.id);
@@ -109,11 +107,6 @@ export function AgentList() {
                 />
                 <CardStat icon={<IconCube size={15} />} value={mcp} label={t("agentList.statMcp")} />
                 <CardStat icon={<IconBolt size={15} />} value={skills} label={t("agentList.statSkills")} />
-                <CardStat
-                  icon={<IconBook size={15} />}
-                  value={knowledge}
-                  label={t("agentWorkbench.assetKnowledge")}
-                />
               </div>
 
               <button

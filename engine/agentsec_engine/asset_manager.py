@@ -94,27 +94,6 @@ def _read_json_safe(path: str) -> Optional[dict]:
         return None
 
 
-def _toggle_skill_file(path: str, enable: bool) -> str:
-    """SKILL.md ↔ SKILL.md.disabled 重命名（可逆禁用）。返回新路径。"""
-    base = path[: -len(".disabled")] if path.endswith(".disabled") else path
-    target = base if enable else base + ".disabled"
-    src = path
-    if src == target:
-        return target  # 已是目标态
-    if not os.path.exists(src):
-        # 容错：目标态文件已存在则视为成功
-        if os.path.exists(target):
-            return target
-        raise AssetOperationError("技能文件不存在，无法操作")
-    if os.path.exists(target):
-        raise AssetOperationError("目标文件已存在，操作中止")
-    try:
-        os.rename(src, target)
-    except OSError as exc:
-        raise AssetOperationError(f"技能{'启用' if enable else '禁用'}失败：{exc}")
-    return target
-
-
 def _toggle_mcp_config(config_path: str, server_key: str, enable: bool) -> None:
     """ruamel 往返修改 config.yaml 的 mcp_servers.<key>.enabled（保留注释/格式）。
 
@@ -139,6 +118,49 @@ def _toggle_mcp_config(config_path: str, server_key: str, enable: bool) -> None:
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             yaml.dump(data, f)
+        os.replace(tmp, config_path)
+    except OSError as exc:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise AssetOperationError(f"写入配置失败：{exc}")
+
+
+def _toggle_openclaw_skill_json(config_path: str, config_key: str, enable: bool) -> None:
+    """写 openclaw.json 的 skills.entries.<key>.enabled。"""
+    if not config_key.startswith("skills:"):
+        raise AssetOperationError(f"不支持的 Skill 配置键：{config_key}")
+    skill_key = config_key.split(":", 1)[1]
+    import json
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except OSError as exc:
+        raise AssetOperationError(f"读取配置失败：{exc}")
+    except ValueError as exc:
+        raise AssetOperationError(f"解析配置失败：{exc}")
+
+    skills = data.setdefault("skills", {})
+    if not isinstance(skills, dict):
+        skills = {}
+        data["skills"] = skills
+    entries = skills.setdefault("entries", {})
+    if not isinstance(entries, dict):
+        entries = {}
+        skills["entries"] = entries
+    entry = entries.get(skill_key)
+    if not isinstance(entry, dict):
+        entry = {}
+        entries[skill_key] = entry
+    entry["enabled"] = bool(enable)
+
+    tmp = config_path + ".agentsec.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.write("\n")
         os.replace(tmp, config_path)
     except OSError as exc:
         try:
@@ -289,18 +311,22 @@ class AssetManager:
         return self.store.patch_asset(asset_id, patch)
 
     def _apply_toggle(self, asset: dict, enable: bool) -> Optional[str]:
-        """真机可逆启停。返回更新后的 path（skill 改名时），否则 None。
+        """真机可逆启停。返回更新后的 path，否则 None。
 
-        - skill：重命名 SKILL.md ↔ SKILL.md.disabled（可逆，不碰主配置）
+        - skill：OpenClaw 写 openclaw.json 的 skills.entries.<key>.enabled
         - mcp  ：ruamel 往返写 config.yaml 的 enabled 标志（保留注释/格式）
         - channel：写 config 中 channels.* / platforms.*.enabled
         无真实句柄（path/config_key）→ 仅快照模拟。
         """
         atype = asset.get("type")
         path = asset.get("path")
-        if atype == "skill" and path:
-            return _toggle_skill_file(path, enable)
-        if atype == "mcp" and path and asset.get("config_key"):
+        config_key = asset.get("config_key") or ""
+        if atype == "skill" and path and config_key.startswith("skills:"):
+            if path.endswith(".json"):
+                _toggle_openclaw_skill_json(path, config_key, enable)
+                return None
+            raise AssetOperationError("该 Skill 不支持通过配置启停")
+        if atype == "mcp" and path and config_key:
             _toggle_mcp_config(path, asset["config_key"], enable)
             return None
         if atype == "channel" and path and asset.get("config_key"):
@@ -312,7 +338,7 @@ class AssetManager:
         asset = self._find_asset(asset_id)
         if not asset:
             raise AssetOperationError("未找到该组件")
-        if not asset.get("can_uninstall", True):
+        if not asset.get("can_uninstall", False):
             raise AssetOperationError("该组件不支持卸载")
         # 有执行上下文 → 真实调包管理器卸载；否则 MVP 模拟（仅从快照移除）
         manager = asset.get("manager")

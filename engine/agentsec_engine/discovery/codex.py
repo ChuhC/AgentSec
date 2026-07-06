@@ -2,11 +2,10 @@
 
 真实格式：
   ~/.codex/config.toml              model / mcp_servers / plugins / projects
-  ~/.codex/skills/**/SKILL.md       用户与内置 Skill
-  ~/.codex/rules/*.rules            规则配置
-  ~/.codex/AGENTS.md                全局 Agent 指令
+  ~/.codex/skills/**/SKILL.md       用户 Skill 与 .system 内置 Skill
+  ~/.codex/skills/**/SKILL.md       用户 Skill 与 .system 内置 Skill
   <project>/.codex/config.toml      可信项目 MCP 覆盖（trust_level = trusted）
-  <project>/AGENTS.md               项目级 Agent 指令
+  ~/.codex/plugins/cache/**         已启用插件的 Skill / Hooks / MCP
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ CODEX_PKG = "@openai/codex"
 CODEX_APP_CLI = "/Applications/Codex.app/Contents/Resources/codex"
 CODEX_APP_INFO = "/Applications/Codex.app/Contents/Info.plist"
 MAX_PROJECT_SCAN = 50
-_SKIP_SKILL_DIRS = frozenset({".system"})
+_SKIP_PLUGIN_DIRS = frozenset({"node_modules", ".git", "marketplaces"})
 _TRUSTED_LEVELS = frozenset({"trusted", "true", "yes", "1"})
 
 
@@ -154,6 +153,98 @@ def _trusted_projects(config: dict) -> List[str]:
     return out[:MAX_PROJECT_SCAN]
 
 
+def _split_plugin_id(plugin_id: str) -> Tuple[str, str]:
+    if "@" in plugin_id:
+        name, marketplace = plugin_id.split("@", 1)
+        return name.strip(), marketplace.strip()
+    return plugin_id.strip(), plugin_id.strip()
+
+
+def _enabled_codex_plugins(config: dict) -> List[Tuple[str, bool]]:
+    plugins = config.get("plugins") or {}
+    if not isinstance(plugins, dict):
+        return []
+    out: List[Tuple[str, bool]] = []
+    for plugin_id, meta in plugins.items():
+        enabled = True
+        if isinstance(meta, dict):
+            enabled = meta.get("enabled", True) is not False
+        out.append((str(plugin_id), enabled))
+    return out
+
+
+def _resolve_codex_plugin_cache_dir(home: str, plugin_id: str) -> Optional[str]:
+    name, marketplace = _split_plugin_id(plugin_id)
+    candidates = [
+        os.path.join(home, "plugins", "cache", marketplace, name),
+        os.path.join(home, "plugins", "cache", name, marketplace),
+    ]
+    for base in candidates:
+        if not os.path.isdir(base):
+            continue
+        versions = [
+            d
+            for d in os.listdir(base)
+            if os.path.isdir(os.path.join(base, d)) and not d.startswith(".")
+        ]
+        if not versions:
+            continue
+        versions.sort(
+            key=lambda v: tuple(int(x) if x.isdigit() else 0 for x in re.split(r"[.\-]", v)),
+            reverse=True,
+        )
+        return os.path.join(base, versions[0])
+    return None
+
+
+def _codex_plugin_manifest(root: str) -> dict:
+    return parsers.read_json(os.path.join(root, ".codex-plugin", "plugin.json")) or {}
+
+
+def _codex_plugin_hooks_path(root: str) -> Optional[str]:
+    manifest = _codex_plugin_manifest(root)
+    hooks = manifest.get("hooks")
+    if isinstance(hooks, str):
+        fp = os.path.join(root, hooks.lstrip("./"))
+        if os.path.isfile(fp):
+            return fp
+    for candidate in (os.path.join(root, "hooks.json"), os.path.join(root, "hooks", "hooks.json")):
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _hooks_use_shell(hooks_data: dict) -> bool:
+    hooks = hooks_data.get("hooks") or {}
+    if not isinstance(hooks, dict):
+        return False
+    for entries in hooks.values():
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            inner = entry.get("hooks") if isinstance(entry, dict) else None
+            if not isinstance(inner, list):
+                continue
+            for hook in inner:
+                if isinstance(hook, dict) and hook.get("type") == "command" and hook.get("command"):
+                    return True
+    return False
+
+
+def _load_codex_plugin_mcp(root: str) -> Dict[str, dict]:
+    manifest = _codex_plugin_manifest(root)
+    mcp_field = manifest.get("mcpServers")
+    if isinstance(mcp_field, dict):
+        return {str(k): v for k, v in mcp_field.items() if isinstance(v, dict)}
+    for name in (".mcp.json", "mcp.json"):
+        path = os.path.join(root, name)
+        data = parsers.read_json(path) or {}
+        servers = data.get("mcpServers") if isinstance(data.get("mcpServers"), dict) else data
+        if isinstance(servers, dict):
+            return {str(k): v for k, v in servers.items() if isinstance(v, dict)}
+    return {}
+
+
 def _mcp_dedup_key(name: str, srv: dict) -> str:
     if srv.get("url"):
         return f"{name}|url|{srv.get('url')}"
@@ -244,8 +335,6 @@ class CodexAdapter(AgentAdapter):
             out.append(parsers.perm(f"codex-default-{k}", k, SRC.AGENT_CONFIG, "Agent 默认", severity))
 
         add("network")
-        if config.get("features", {}).get("memories"):
-            add("knowledge")
         for _name, srv in (config.get("mcp_servers") or {}).items():
             if isinstance(srv, dict):
                 for p in parsers.perms_from_mcp_server(str(_name), srv):
@@ -263,8 +352,10 @@ class CodexAdapter(AgentAdapter):
         assets.extend(self._mcp_from_config(config, os.path.join(home, "config.toml")))
         assets.extend(self._project_assets(config))
         assets.extend(self._skills(home))
-        assets.extend(self._rules(home))
-        assets.extend(self._plugins(config))
+        assets.extend(self._plugins(config, home))
+        assets.extend(self._plugin_skills(home, config))
+        assets.extend(self._plugin_hooks(home, config))
+        assets.extend(self._plugin_mcp(home, config))
         assets.extend(self._dependency())
         return self._dedupe_assets(assets)
 
@@ -316,22 +407,6 @@ class CodexAdapter(AgentAdapter):
                         proj_config_path,
                     )
                 )
-            agents_md = os.path.join(project_path, "AGENTS.md")
-            if os.path.isfile(agents_md):
-                out.append(
-                    Asset(
-                        id=f"codex-rule-{_slug(project_path)}-agents-md",
-                        agent_id="codex",
-                        type=AT.KNOWLEDGE.value,
-                        name=f"AGENTS.md · {os.path.basename(project_path)}",
-                        status=ST.ENABLED.value,
-                        purpose="项目级 Agent 规则",
-                        source="Codex",
-                        path=agents_md,
-                        can_disable=False,
-                        can_uninstall=False,
-                    )
-                )
         return out
 
     def _skills(self, home: str) -> List[Asset]:
@@ -345,8 +420,7 @@ class CodexAdapter(AgentAdapter):
                 continue
             rel = os.path.relpath(dirpath, skills_root)
             top = rel.split(os.sep)[0]
-            if top in _SKIP_SKILL_DIRS:
-                continue
+            is_system = top == ".system"
             skill_path = os.path.join(dirpath, "SKILL.md")
             fm = parsers.parse_skill_frontmatter(skill_path)
             name = str((fm or {}).get("name") or os.path.basename(dirpath))
@@ -359,79 +433,169 @@ class CodexAdapter(AgentAdapter):
                     type=AT.SKILL.value,
                     name=name,
                     status=ST.ENABLED.value,
-                    purpose="用户 Skill",
+                    purpose="内置 Skill" if is_system else "用户 Skill",
                     source="Codex",
                     path=skill_path,
-                    skill_scope="user",
+                    skill_scope="global" if is_system else "user",
                     permissions=perms,
-                    can_disable=True,
-                    can_uninstall=True,
-                )
-            )
-        return out
-
-    def _rules(self, home: str) -> List[Asset]:
-        out: List[Asset] = []
-        agents_md = os.path.join(home, "AGENTS.md")
-        if os.path.isfile(agents_md) and os.path.getsize(agents_md) > 0:
-            out.append(
-                Asset(
-                    id="codex-rule-agents-md",
-                    agent_id="codex",
-                    type=AT.KNOWLEDGE.value,
-                    name="AGENTS.md",
-                    status=ST.ENABLED.value,
-                    purpose="全局 Agent 规则",
-                    source="Codex",
-                    path=agents_md,
                     can_disable=False,
                     can_uninstall=False,
                 )
             )
-        rules_dir = os.path.join(home, "rules")
-        if os.path.isdir(rules_dir):
-            for fname in sorted(os.listdir(rules_dir)):
-                if not fname.endswith(".rules"):
+        return out
+
+    def _plugins(self, config: dict, home: str) -> List[Asset]:
+        out: List[Asset] = []
+        for plugin_id, enabled in _enabled_codex_plugins(config):
+            root = _resolve_codex_plugin_cache_dir(home, plugin_id)
+            manifest = _codex_plugin_manifest(root) if root else {}
+            display = str(manifest.get("name") or plugin_id)
+            version = str(manifest.get("version") or "") or None
+            purpose = str(manifest.get("description") or "") or "Codex 插件"
+            if len(purpose) > 120:
+                purpose = purpose[:117] + "..."
+            out.append(
+                Asset(
+                    id=f"codex-plugin-{_slug(plugin_id)}",
+                    agent_id="codex",
+                    type=AT.PLUGIN.value,
+                    name=display,
+                    version=version,
+                    status=ST.ENABLED.value if enabled else ST.DISABLED.value,
+                    purpose=purpose,
+                    source="Codex",
+                    path=root,
+                    config_key=plugin_id,
+                    can_disable=False,
+                    can_uninstall=False,
+                )
+            )
+        return out
+
+    def _plugin_skills(self, home: str, config: dict) -> List[Asset]:
+        out: List[Asset] = []
+        seen: Set[str] = set()
+        for plugin_id, enabled in _enabled_codex_plugins(config):
+            if not enabled:
+                continue
+            root = _resolve_codex_plugin_cache_dir(home, plugin_id)
+            if not root:
+                continue
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [d for d in dirnames if d not in _SKIP_PLUGIN_DIRS]
+                if "SKILL.md" not in filenames:
                     continue
-                path = os.path.join(rules_dir, fname)
+                skill_path = os.path.join(dirpath, "SKILL.md")
+                rel = os.path.relpath(dirpath, root).replace(os.sep, "/")
+                fm = parsers.parse_skill_frontmatter(skill_path)
+                name = str((fm or {}).get("name") or os.path.basename(dirpath))
+                asset_id = f"codex-plugin-skill-{_slug(plugin_id)}-{_slug(rel)}"
+                if asset_id in seen:
+                    continue
+                seen.add(asset_id)
+                perms = parsers.perms_from_skill_frontmatter(_slug(name), name, fm or {})
+                purpose = str((fm or {}).get("description") or "") or "插件 Skill"
                 out.append(
                     Asset(
-                        id=f"codex-rule-{_slug(fname)}",
+                        id=asset_id,
                         agent_id="codex",
-                        type=AT.KNOWLEDGE.value,
-                        name=f"rules/{fname}",
+                        type=AT.SKILL.value,
+                        name=name,
+                        version=str((fm or {}).get("version") or "") or None,
                         status=ST.ENABLED.value,
-                        purpose="Codex 规则配置",
+                        purpose=f"{purpose} · {plugin_id}",
                         source="Codex",
-                        path=path,
+                        path=skill_path,
+                        config_key=plugin_id,
+                        skill_scope="global",
+                        permissions=perms,
                         can_disable=False,
                         can_uninstall=False,
                     )
                 )
         return out
 
-    def _plugins(self, config: dict) -> List[Asset]:
+    def _plugin_hooks(self, home: str, config: dict) -> List[Asset]:
         out: List[Asset] = []
-        plugins = config.get("plugins") or {}
-        if not isinstance(plugins, dict):
-            return out
-        for name, meta in plugins.items():
-            enabled = True
-            if isinstance(meta, dict):
-                enabled = meta.get("enabled", True) is not False
+        seen: Set[str] = set()
+        for plugin_id, enabled in _enabled_codex_plugins(config):
+            if not enabled:
+                continue
+            root = _resolve_codex_plugin_cache_dir(home, plugin_id)
+            if not root:
+                continue
+            hooks_path = _codex_plugin_hooks_path(root)
+            if not hooks_path:
+                continue
+            asset_id = f"codex-plugin-hook-{_slug(plugin_id)}"
+            if asset_id in seen:
+                continue
+            seen.add(asset_id)
+            manifest = _codex_plugin_manifest(root)
+            hooks_data = parsers.read_json(hooks_path) or {}
+            perms: List[PermissionEntry] = []
+            if _hooks_use_shell(hooks_data):
+                label = str(manifest.get("name") or plugin_id)
+                perms.append(
+                    parsers.perm(
+                        f"codex-plugin-hook-{_slug(plugin_id)}-shell",
+                        "shell",
+                        SRC.AGENT_CONFIG,
+                        f"Hooks · {label}",
+                        S.HIGH,
+                    )
+                )
             out.append(
                 Asset(
-                    id=f"codex-plugin-{_slug(str(name))}",
+                    id=asset_id,
                     agent_id="codex",
-                    type=AT.KNOWLEDGE.value,
-                    name=str(name),
-                    status=ST.ENABLED.value if enabled else ST.DISABLED.value,
-                    purpose="Codex 插件",
+                    type=AT.HOOK.value,
+                    name=f"hooks · {manifest.get('name') or plugin_id}",
+                    version=str(manifest.get("version") or "") or None,
+                    status=ST.ENABLED.value,
+                    purpose=f"插件生命周期 Hooks · {plugin_id}",
                     source="Codex",
-                    can_disable=True,
+                    path=hooks_path,
+                    config_key=plugin_id,
+                    permissions=perms,
+                    can_disable=False,
                     can_uninstall=False,
                 )
             )
+        return out
+
+    def _plugin_mcp(self, home: str, config: dict) -> List[Asset]:
+        out: List[Asset] = []
+        seen: Set[str] = set()
+        for plugin_id, enabled in _enabled_codex_plugins(config):
+            if not enabled:
+                continue
+            root = _resolve_codex_plugin_cache_dir(home, plugin_id)
+            if not root:
+                continue
+            manifest = _codex_plugin_manifest(root)
+            mcp_path = os.path.join(root, ".mcp.json")
+            if not os.path.isfile(mcp_path):
+                mcp_path = root
+            for name, srv in _load_codex_plugin_mcp(root).items():
+                key = _mcp_dedup_key(str(name), srv)
+                if key in seen:
+                    continue
+                seen.add(key)
+                asset = _mcp_to_asset(
+                    "codex",
+                    str(name),
+                    srv,
+                    config_path=mcp_path,
+                    source="Codex",
+                    asset_prefix="codex-mcp-plugin",
+                )
+                asset.version = str(manifest.get("version") or "") or None
+                asset.config_key = plugin_id
+                asset.purpose = f"{asset.purpose} · {plugin_id}"
+                asset.can_disable = False
+                asset.can_uninstall = False
+                out.append(asset)
         return out
 
     def _dependency(self) -> List[Asset]:
@@ -456,8 +620,6 @@ class CodexAdapter(AgentAdapter):
                 manager="npm",
                 install_path=install_path,
                 package_name=CODEX_PKG,
-                can_update=True,
-                can_uninstall=True,
                 can_disable=False,
             )
         ]
@@ -480,19 +642,42 @@ class CodexAdapter(AgentAdapter):
             targets.append((real, source))
 
         add(os.path.join(home, "config.toml"), SRC.AGENT_CONFIG.value)
-        add(os.path.join(home, "AGENTS.md"), SRC.KNOWLEDGE.value)
+        add(os.path.join(home, "AGENTS.md"), SRC.RULE.value)
         rules_dir = os.path.join(home, "rules")
         if os.path.isdir(rules_dir):
             for fname in os.listdir(rules_dir):
                 if fname.endswith(".rules"):
-                    add(os.path.join(rules_dir, fname), SRC.KNOWLEDGE.value)
+                    add(os.path.join(rules_dir, fname), SRC.RULE.value)
+        memories_dir = os.path.join(home, "memories")
+        if os.path.isdir(memories_dir):
+            for fname in os.listdir(memories_dir):
+                if fname.startswith("."):
+                    continue
+                path = os.path.join(memories_dir, fname)
+                if os.path.isfile(path) and fname.endswith((".md", ".txt", ".json")):
+                    add(path, SRC.AGENT_CONFIG.value)
         skills_root = os.path.join(home, "skills")
         if os.path.isdir(skills_root):
             for dirpath, dirnames, filenames in os.walk(skills_root):
-                dirnames[:] = [d for d in dirnames if d not in _SKIP_SKILL_DIRS]
+                dirnames[:] = [d for d in dirnames if d not in ("node_modules", ".git")]
                 if "SKILL.md" in filenames:
                     add(os.path.join(dirpath, "SKILL.md"), SRC.SKILL.value)
         for project_path in _trusted_projects(config):
-            add(os.path.join(project_path, "AGENTS.md"), SRC.KNOWLEDGE.value)
+            add(os.path.join(project_path, "AGENTS.md"), SRC.RULE.value)
             add(os.path.join(project_path, ".codex", "config.toml"), SRC.AGENT_CONFIG.value)
+        for plugin_id, enabled in _enabled_codex_plugins(config):
+            if not enabled:
+                continue
+            root = _resolve_codex_plugin_cache_dir(home, plugin_id)
+            if not root:
+                continue
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [d for d in dirnames if d not in _SKIP_PLUGIN_DIRS]
+                if "SKILL.md" in filenames:
+                    add(os.path.join(dirpath, "SKILL.md"), SRC.SKILL.value)
+            hooks_path = _codex_plugin_hooks_path(root)
+            if hooks_path:
+                add(hooks_path, SRC.AGENT_CONFIG.value)
+            for name in (".mcp.json", "mcp.json"):
+                add(os.path.join(root, name), SRC.MCP.value)
         return targets

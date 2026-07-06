@@ -83,10 +83,6 @@ interface AppState {
   layer: LocaleDataLayer;
   startScan: (scope: ScanScope, scopePath?: string) => Promise<void>;
   cancelScan: () => Promise<void>;
-  updateAsset: (id: string) => Promise<void>;
-  disableAsset: (id: string) => Promise<void>;
-  enableAsset: (id: string) => Promise<void>;
-  uninstallAsset: (id: string) => Promise<void>;
   refreshAgentAssets: (agentId: string) => Promise<ScanSnapshot | null>;
   updateAgent: (agentId: string) => Promise<void>;
   fetchAgentRuntime: (agentId: string) => Promise<AgentRuntime | null>;
@@ -111,8 +107,6 @@ const DEFAULT_SETTINGS: Settings = {
   language: "zh",
   theme: "glass",
   confirmUpdate: true,
-  confirmUninstall: true,
-  confirmDisable: true,
   cveOnline: true,
 };
 
@@ -312,18 +306,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [t]);
 
-  const doAssetOp = useCallback(
-    async (method: string, id: string) => {
-      try {
-        const res = await requireAgentsec().request(method, { assetId: id });
-        if (res?.snapshot) setSnapshot(res.snapshot);
-      } catch (e: any) {
-        setLastError(e?.message || t("errors.opFailed"));
-      }
-    },
-    [t]
-  );
-
   const refreshAgentAssets = useCallback(async (agentId: string): Promise<ScanSnapshot | null> => {
     try {
       const res = await requireAgentsec().request("agent.refresh", {
@@ -405,10 +387,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       layer,
       startScan,
       cancelScan,
-      updateAsset: (id) => doAssetOp("asset.update", id),
-      disableAsset: (id) => doAssetOp("asset.disable", id),
-      enableAsset: (id) => doAssetOp("asset.enable", id),
-      uninstallAsset: (id) => doAssetOp("asset.uninstall", id),
       refreshAgentAssets,
       updateAgent,
       fetchAgentRuntime,

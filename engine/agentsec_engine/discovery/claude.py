@@ -376,8 +376,6 @@ class ClaudeAdapter(AgentAdapter):
             + self._hooks(home, settings)
             + self._skills(home, settings)
             + self._user_skills(home)
-            + self._project_rules(claude_json)
-            + self._marketplaces(home, settings)
             + self._deps()
         )
 
@@ -608,7 +606,7 @@ class ClaudeAdapter(AgentAdapter):
                     Asset(
                         id=asset_id,
                         agent_id="claude",
-                        type=AT.KNOWLEDGE.value,
+                        type=AT.RULE.value,
                         name=f"{fname} · {proj_name}",
                         version=None,
                         status=ST.ENABLED.value,
@@ -637,7 +635,7 @@ class ClaudeAdapter(AgentAdapter):
                             Asset(
                                 id=asset_id,
                                 agent_id="claude",
-                                type=AT.KNOWLEDGE.value,
+                                type=AT.RULE.value,
                                 name=f".claude/rules/{rel} · {proj_name}",
                                 version=None,
                                 status=ST.ENABLED.value,
@@ -674,7 +672,6 @@ class ClaudeAdapter(AgentAdapter):
                 install_path=install_path,
                 can_disable=False,
                 can_uninstall=False,
-                can_update=True,
             )
         ]
 
@@ -751,55 +748,6 @@ class ClaudeAdapter(AgentAdapter):
         out.sort(key=lambda a: a.name.lower())
         return out
 
-    def _marketplaces(self, home: Optional[str], settings: dict) -> List[Asset]:
-        raw = settings.get("extraKnownMarketplaces")
-        if not raw:
-            return []
-        entries: List[Tuple[str, dict]] = []
-        if isinstance(raw, dict):
-            for key, val in raw.items():
-                entries.append((str(key), val if isinstance(val, dict) else {}))
-        elif isinstance(raw, list):
-            for idx, entry in enumerate(raw):
-                if isinstance(entry, str):
-                    entries.append((entry, {}))
-                elif isinstance(entry, dict):
-                    name = str(
-                        entry.get("name") or entry.get("id") or entry.get("url") or f"marketplace-{idx}"
-                    )
-                    entries.append((name, entry))
-        else:
-            return []
-        out: List[Asset] = []
-        settings_path = self._settings_path(home) or claude_json_path()
-        for name, entry in entries:
-            slug = _slug(name)
-            repo = ""
-            if isinstance(entry.get("source"), dict):
-                repo = str(entry["source"].get("repo") or "")
-            purpose = "插件市场来源"
-            if repo:
-                purpose = f"{purpose}|repo:{repo}"
-            out.append(
-                Asset(
-                    id=f"claude-marketplace-{slug}",
-                    agent_id="claude",
-                    type=AT.KNOWLEDGE.value,
-                    name=name,
-                    version=None,
-                    status=ST.ENABLED.value,
-                    purpose=purpose,
-                    source="Claude Code",
-                    permissions=[],
-                    path=settings_path,
-                    config_key=f"extraKnownMarketplaces.{name}",
-                    can_disable=False,
-                    can_uninstall=False,
-                    can_update=False,
-                )
-            )
-        return out
-
     def atr_targets(self, agent: Agent) -> List[Tuple[str, str]]:
         home = getattr(self, "_home", None) or self.resolve_home()
         settings = getattr(self, "_settings", None) or {}
@@ -854,13 +802,13 @@ class ClaudeAdapter(AgentAdapter):
         claude_json = getattr(self, "_claude_json", None) or parsers.read_json(claude_json_path()) or {}
         for project_path, _proj in _iter_projects(claude_json):
             for fname in _PROJECT_RULE_FILES:
-                add(os.path.join(project_path, fname), SRC.AGENT_CONFIG.value)
+                add(os.path.join(project_path, fname), SRC.RULE.value)
             rules_dir = os.path.join(project_path, ".claude", "rules")
             if os.path.isdir(rules_dir):
                 for root, _dirs, files in os.walk(rules_dir):
                     for fname in files:
                         if fname.endswith(".md"):
-                            add(os.path.join(root, fname), SRC.AGENT_CONFIG.value)
+                            add(os.path.join(root, fname), SRC.RULE.value)
             mcp_path = os.path.join(project_path, ".mcp.json")
             add(mcp_path, SRC.MCP.value)
 

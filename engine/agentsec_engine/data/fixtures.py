@@ -88,7 +88,7 @@ def build_assets():
     assets.append(Asset(
         id="hermes-mcp-shell", agent_id="hermes", type=AT.MCP.value,
         name="shell", version="1.1.0", latest_version="1.2.0",
-        status=ST.UPDATABLE.value,
+        status=ST.ENABLED.value,
         purpose="远程命令执行，支持在目标主机上执行 shell 命令并返回结果。",
         source="Hermes",
         permissions=[
@@ -96,7 +96,7 @@ def build_assets():
             _perm("p-sh-net", "访问内网、外网", "网络", SRC.MCP, "shell MCP", S.MEDIUM),
             _perm("p-sh-file", "读取、写入、创建、删除", "文件", SRC.MCP, "shell MCP", S.HIGH),
         ],
-        can_update=True,
+        can_update=False,
     ))
     assets.append(Asset(
         id="hermes-mcp-browser", agent_id="hermes", type=AT.MCP.value,
@@ -108,10 +108,10 @@ def build_assets():
     assets.append(Asset(
         id="hermes-skill-web-search", agent_id="hermes", type=AT.SKILL.value,
         name="Web Search Skill", version="1.1.0", latest_version="1.2.0",
-        status=ST.UPDATABLE.value,
+        status=ST.ENABLED.value,
         purpose="联网搜索并汇总结果", source="Hermes",
         permissions=[_perm("p-ws-net", "网络搜索", "网络", SRC.SKILL, "Web Search Skill", S.LOW)],
-        can_update=True,
+        can_update=False,
     ))
     assets.append(Asset(
         id="hermes-skill-python-runner", agent_id="hermes", type=AT.SKILL.value,
@@ -128,19 +128,6 @@ def build_assets():
             id=sid, agent_id="hermes", type=AT.SKILL.value, name=nm,
             version=ver, status=ST.ENABLED.value, purpose="辅助技能", source="Hermes",
         ))
-    assets.append(Asset(
-        id="hermes-kb-github", agent_id="hermes", type=AT.KNOWLEDGE.value,
-        name="GitHub Knowledge", version="1.0.3", latest_version="1.1.0",
-        status=ST.UPDATABLE.value, purpose="GitHub 仓库知识库", source="Hermes",
-        permissions=[_perm("p-kb-read", "读取知识库内容", "知识库", SRC.KNOWLEDGE, "GitHub Knowledge", S.LOW)],
-        can_update=True,
-    ))
-    assets.append(Asset(
-        id="hermes-kb-docs", agent_id="hermes", type=AT.KNOWLEDGE.value,
-        name="Docs Knowledge", version="1.0.0", status=ST.ENABLED.value,
-        purpose="远程文档知识库", source="Hermes",
-        permissions=[_perm("p-kb-dl", "下载远程内容", "知识库", SRC.KNOWLEDGE, "Docs Knowledge", S.LOW)],
-    ))
     assets.append(Asset(
         id="hermes-channel-webchat", agent_id="hermes", type=AT.CHANNEL.value,
         name="WebChat", version="pairing", status=ST.ENABLED.value,

@@ -95,21 +95,12 @@ def enrich_agent(
         agent.latest_version = agent.version
 
 
-def _apply_version_fields(
-    asset: Asset,
-    latest: Optional[str],
-    *,
-    can_update: bool = True,
-) -> None:
+def _apply_version_fields(asset: Asset, latest: Optional[str]) -> None:
     if asset.status == ST.DISABLED.value:
         return
     cur = normalize_version(asset.version)
     lat = normalize_version(latest) if latest else ""
-    if lat and cur and is_newer(lat, cur):
-        asset.latest_version = lat
-        asset.status = ST.UPDATABLE.value
-        asset.can_update = can_update
-    elif lat and not cur:
+    if lat and not cur:
         asset.version = lat
         asset.latest_version = lat
         asset.status = ST.ENABLED.value
@@ -129,7 +120,7 @@ def enrich_assets(
                 _enrich_dependency(asset, online)
         elif asset.type == AT.MCP.value:
             _enrich_mcp(asset, online)
-        elif asset.type in (AT.SKILL.value, AT.HOOK.value, AT.KNOWLEDGE.value):
+        elif asset.type in (AT.SKILL.value, AT.HOOK.value, AT.KNOWLEDGE.value, AT.RULE.value, AT.PLUGIN.value):
             _enrich_static_asset(asset)
 
 
@@ -143,10 +134,7 @@ def _enrich_dependency(asset: Asset, online: bool) -> None:
         latest = fetch_npm_latest(pkg)
     elif eco in ("pypi", "pip"):
         latest = fetch_pypi_latest(pkg)
-    if latest and asset.manager:
-        asset.can_update = True
-        asset.can_uninstall = True
-    _apply_version_fields(asset, latest, can_update=bool(asset.manager))
+    _apply_version_fields(asset, latest)
 
 
 def _enrich_mcp(asset: Asset, online: bool) -> None:
@@ -157,16 +145,12 @@ def _enrich_mcp(asset: Asset, online: bool) -> None:
         return
     latest = fetch_npm_latest(pkg) if asset.manager == "npm" else None
     if latest:
-        _apply_version_fields(asset, latest, can_update=bool(asset.can_update))
+        _apply_version_fields(asset, latest)
 
 
 def _enrich_static_asset(asset: Asset) -> None:
-    """Skill / 知识库：frontmatter 或发现阶段已写入 latest_version 时标记可更新。"""
-    if asset.status == ST.DISABLED.value:
-        return
-    if asset.latest_version and is_newer(asset.latest_version, asset.version or ""):
-        asset.status = ST.UPDATABLE.value
-        asset.can_update = True
+    """Skill / 知识库等静态资产：仅保留 latest_version 供展示，不开放更新操作。"""
+    return
 
 
 def enrich_discovery(

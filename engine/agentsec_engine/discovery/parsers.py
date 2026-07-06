@@ -47,7 +47,6 @@ _PERM_MAP = {
     "network": ("访问网络", "网络", S.MEDIUM),
     "net": ("访问网络", "网络", S.MEDIUM),
     "db": ("读写数据库", "工具", S.MEDIUM),
-    "knowledge": ("读取知识库内容", "知识库", S.LOW),
 }
 
 
@@ -180,6 +179,27 @@ def _skill_scope_for_root(root_label: str) -> str:
     return "user"
 
 
+def openclaw_skill_entry_key(fm: dict, fallback_name: str) -> str:
+    """OpenClaw skills.entries 键：metadata.openclaw.skillKey 或 skill name。"""
+    meta = fm.get("metadata")
+    if isinstance(meta, str):
+        try:
+            meta = json.loads(meta)
+        except ValueError:
+            meta = {}
+    if not isinstance(meta, dict):
+        meta = {}
+    oc = meta.get("openclaw")
+    if isinstance(oc, str):
+        try:
+            oc = json.loads(oc)
+        except ValueError:
+            oc = {}
+    if isinstance(oc, dict) and oc.get("skillKey"):
+        return str(oc["skillKey"])
+    return str(fallback_name)
+
+
 def discover_skills_in_roots(
     agent_id: str,
     source: str,
@@ -192,11 +212,9 @@ def discover_skills_in_roots(
         if not os.path.isdir(root):
             continue
         for dirpath, _dirs, files in os.walk(root, followlinks=True):
-            disabled = "SKILL.md.disabled" in files
-            if "SKILL.md" not in files and not disabled:
+            if "SKILL.md" not in files:
                 continue
-            fname = "SKILL.md.disabled" if disabled else "SKILL.md"
-            md = os.path.join(dirpath, fname)
+            md = os.path.join(dirpath, "SKILL.md")
             fm = parse_skill_frontmatter(md)
             name = str(fm.get("name") or os.path.basename(dirpath))
             if name in by_name:
@@ -213,13 +231,13 @@ def discover_skills_in_roots(
                 type=AT.SKILL.value,
                 name=name,
                 version=str(fm.get("version", "")) or None,
-                status=ST.DISABLED.value if disabled else ST.ENABLED.value,
+                status=ST.ENABLED.value,
                 purpose=desc,
                 source=source,
                 skill_scope=_skill_scope_for_root(root_label),
                 permissions=perms,
                 path=md,
-                can_disable=True,
+                can_disable=False,
                 can_uninstall=False,
             )
 
@@ -381,14 +399,10 @@ def discover_openclaw_dependencies(home: str, agent_id: str = "openclaw") -> Lis
                 d.manager = "npm"
                 d.install_path = install_root
                 d.package_name = d.name
-                d.can_update = True
-                d.can_uninstall = True
             elif d.ecosystem == "PyPI" and install_root:
                 d.manager = "pip"
                 d.install_path = install_root
                 d.package_name = d.name
-                d.can_update = True
-                d.can_uninstall = True
             d.can_disable = False
             by_key[key] = d
 

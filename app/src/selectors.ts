@@ -113,7 +113,6 @@ export function assetCounts(s: ScanSnapshot) {
     agents: s.agents.length,
     mcp: s.assets.filter((a) => a.type === "mcp").length,
     skills: s.assets.filter((a) => a.type === "skill").length,
-    knowledge: s.assets.filter((a) => a.type === "knowledge").length,
     channels: s.assets.filter((a) => a.type === "channel").length,
     updatable: s.assets.filter((a) => a.status === "updatable").length,
     dependencies: s.assets.filter((a) => a.type === "dependency").length,
@@ -407,7 +406,16 @@ export function cveForAgent(s: ScanSnapshot, agentId: string): CVEFinding[] {
   return s.cve_findings.filter((c) => c.agent_ids.includes(agentId));
 }
 
-const PERM_RADAR_CATS = ["文件", "Shell", "网络", "工具", "知识库"] as const;
+export const PERM_RADAR_CATS = ["文件", "Shell", "网络", "工具"] as const;
+const KNOWLEDGE_PERM_CATEGORY = "知识库";
+
+export function isKnowledgePermission(p: PermissionEntry): boolean {
+  return p.category === KNOWLEDGE_PERM_CATEGORY;
+}
+
+export function visiblePermissions(perms: PermissionEntry[]): PermissionEntry[] {
+  return perms.filter((p) => !isKnowledgePermission(p));
+}
 const PERM_SEV_W: Record<Severity, number> = {
   high: 3,
   medium: 2,
@@ -545,7 +553,10 @@ function permissionScores(s: ScanSnapshot, agentId: string): number[] {
   const agent = s.agents.find((a) => a.id === agentId);
   if (!agent) return PERM_RADAR_CATS.map(() => 0);
   const assets = assetsByAgent(s, agentId);
-  const perms = [...agent.permissions, ...assets.flatMap((a) => a.permissions)];
+  const perms = visiblePermissions([
+    ...agent.permissions,
+    ...assets.flatMap((a) => a.permissions),
+  ]);
   return PERM_RADAR_CATS.map((cat) => {
     const inCat = perms.filter((p) => p.category === cat);
     const max = inCat.reduce((m, p) => Math.max(m, PERM_SEV_W[p.severity]), 0);
@@ -553,7 +564,7 @@ function permissionScores(s: ScanSnapshot, agentId: string): number[] {
   });
 }
 
-export type AssetSubTabKey = "MCP" | "Skills" | "Hooks" | "知识库" | "通道" | "依赖";
+export type AssetSubTabKey = "MCP" | "Skills" | "Hooks" | "插件" | "通道" | "依赖";
 
 export interface PermissionSourceGroup {
   sourceLabel: string;
@@ -562,7 +573,7 @@ export interface PermissionSourceGroup {
   assetId?: string;
 }
 
-export type PermissionSectionKey = "agent_default" | "mcp" | "skill" | "hook" | "knowledge" | "channel";
+export type PermissionSectionKey = "agent_default" | "mcp" | "skill" | "hook" | "channel";
 
 export interface PermissionSection {
   key: PermissionSectionKey;
@@ -574,7 +585,6 @@ const PERMISSION_SECTION_ORDER: PermissionSectionKey[] = [
   "mcp",
   "skill",
   "hook",
-  "knowledge",
   "channel",
 ];
 
@@ -582,7 +592,6 @@ const ASSET_TYPE_TO_SECTION: Partial<Record<AssetTypeT, PermissionSectionKey>> =
   mcp: "mcp",
   skill: "skill",
   hook: "hook",
-  knowledge: "knowledge",
   channel: "channel",
 };
 
@@ -591,7 +600,6 @@ const SECTION_SOURCE: Record<PermissionSectionKey, string> = {
   mcp: "mcp",
   skill: "skill",
   hook: "agent_config",
-  knowledge: "knowledge",
   channel: "channel",
 };
 
@@ -624,7 +632,7 @@ export function groupPermissionsBySection(agent: Agent, assets: Asset[]): Permis
     bucket.set(key, list);
   };
 
-  const agentPerms = dedupePermissions(agent.permissions);
+  const agentPerms = visiblePermissions(dedupePermissions(agent.permissions));
   if (agentPerms.length) {
     push("agent_default", {
       sourceLabel: AGENT_DEFAULT_SOURCE_LABEL,
@@ -634,7 +642,8 @@ export function groupPermissionsBySection(agent: Agent, assets: Asset[]): Permis
   }
 
   for (const asset of assets) {
-    const perms = dedupePermissions(asset.permissions);
+    if (asset.type === "knowledge") continue;
+    const perms = visiblePermissions(dedupePermissions(asset.permissions));
     if (!perms.length) continue;
     const sectionKey = ASSET_TYPE_TO_SECTION[asset.type];
     if (!sectionKey) continue;
@@ -707,23 +716,24 @@ const SOURCE_TO_SUB_TAB: Record<string, AssetSubTabKey | null> = {
   mcp: "MCP",
   skill: "Skills",
   hook: "Hooks",
-  knowledge: "知识库",
+  knowledge: null,
+  plugin: "插件",
   channel: "通道",
   dependency: "依赖",
   agent_config: null,
 };
 
-const ASSET_TYPE_TO_SUB_TAB: Record<AssetTypeT, AssetSubTabKey> = {
+const ASSET_TYPE_TO_SUB_TAB: Partial<Record<AssetTypeT, AssetSubTabKey>> = {
   mcp: "MCP",
   skill: "Skills",
   hook: "Hooks",
-  knowledge: "知识库",
+  plugin: "插件",
   channel: "通道",
   dependency: "依赖",
 };
 
-function assetSubTabForType(type: AssetTypeT): AssetSubTabKey {
-  return ASSET_TYPE_TO_SUB_TAB[type];
+function assetSubTabForType(type: AssetTypeT): AssetSubTabKey | null {
+  return ASSET_TYPE_TO_SUB_TAB[type] ?? null;
 }
 
 /** 解析「定位来源」目标：资产管理子 Tab + 资产 id */

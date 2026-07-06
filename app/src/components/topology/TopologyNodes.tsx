@@ -28,6 +28,8 @@ export const AgentNode = ({ id, data }: NodeProps<TopoNode>) => {
       <Handle type="target" position={Position.Left} id="left" className="topo-handle" />
       <Handle type="target" position={Position.Right} id="target-right" className="topo-handle" />
       <Handle type="target" position={Position.Bottom} id="target-bottom" className="topo-handle" />
+      <Handle type="source" position={Position.Top} id="source-top" className="topo-handle" />
+      <Handle type="source" position={Position.Left} id="source-left" className="topo-handle" />
       <Handle type="source" position={Position.Right} id="right" className="topo-handle" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="topo-handle" />
       {icon && <img src={icon} className="topo-node-icon" alt="" />}
@@ -45,8 +47,14 @@ export const CategoryNode = ({ id, data }: NodeProps<TopoNode>) => {
   if (isComponent) {
     return (
       <div data-topo-id={id} className="topo-node topo-component" style={{ borderColor: color, background: bg, width: 164, height: 50 }}>
-        <Handle type="target" position={Position.Top} id="top" className="topo-handle" />
+        <Handle type="source" position={Position.Top} id="top" className="topo-handle" />
+        <Handle type="source" position={Position.Right} id="right" className="topo-handle" />
         <Handle type="source" position={Position.Bottom} id="bottom" className="topo-handle" />
+        <Handle type="source" position={Position.Left} id="left" className="topo-handle" />
+        <Handle type="target" position={Position.Top} id="target-top" className="topo-handle" />
+        <Handle type="target" position={Position.Right} id="target-right" className="topo-handle" />
+        <Handle type="target" position={Position.Bottom} id="target-bottom" className="topo-handle" />
+        <Handle type="target" position={Position.Left} id="target-left" className="topo-handle" />
         <div className="topo-category-body">
           {icon && <img src={icon} className="topo-cat-icon" alt="" />}
           <div className="topo-comp-text">
@@ -83,8 +91,14 @@ export const RiskNode = ({ id, data }: NodeProps<TopoNode>) => {
   const { label, color, count, threatHigh, threatMed, icon } = data;
   return (
     <div data-topo-id={id} className="topo-node topo-risk" style={{ borderColor: color, background: nodeBackground(color), width: 172, height: 68 }}>
-      <Handle type="target" position={Position.Top} id="top" className="topo-handle" />
+      <Handle type="source" position={Position.Top} id="top" className="topo-handle" />
+      <Handle type="source" position={Position.Right} id="right" className="topo-handle" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="topo-handle" />
+      <Handle type="source" position={Position.Left} id="left" className="topo-handle" />
+      <Handle type="target" position={Position.Top} id="target-top" className="topo-handle" />
+      <Handle type="target" position={Position.Right} id="target-right" className="topo-handle" />
+      <Handle type="target" position={Position.Bottom} id="target-bottom" className="topo-handle" />
+      <Handle type="target" position={Position.Left} id="target-left" className="topo-handle" />
       <div className="topo-category-body">
         {icon && <img src={icon} className="topo-cat-icon" alt="" />}
         <span className="topo-label">{label}</span>

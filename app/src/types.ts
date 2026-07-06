@@ -1,13 +1,13 @@
 // 与 Python 引擎 models.py 对齐的前端类型。
 
 export type Severity = "high" | "medium" | "low" | "safe" | "info";
-export type AssetTypeT = "mcp" | "skill" | "hook" | "knowledge" | "dependency" | "channel";
+export type AssetTypeT = "mcp" | "skill" | "hook" | "knowledge" | "rule" | "plugin" | "dependency" | "channel";
 export type AssetStatusT = "enabled" | "disabled" | "updatable";
 
 export interface PermissionEntry {
   id: string;
   name: string;
-  category: string; // 文件 / Shell / 网络 / 工具 / 知识库
+  category: string; // 文件 / Shell / 网络 / 工具
   source: string;
   source_label: string;
   severity: Severity;

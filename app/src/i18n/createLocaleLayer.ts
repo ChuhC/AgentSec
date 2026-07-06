@@ -56,6 +56,7 @@ const THREAT_DATA_KEY: Record<string, string> = {
 const THREAT_SOURCE_KEY: Record<string, string> = {
   agent_config: "threatList.sourceAgentConfig",
   knowledge: "threatList.sourceKnowledge",
+  rule: "threatList.sourceRule",
   openclaw_audit: "threatList.sourceOpenclawAudit",
 };
 
@@ -87,6 +88,8 @@ const PURPOSE_ZH_TO_KEY: Record<string, string> = {
   "npm 依赖组件": "depNpm",
   "插件 npm 依赖组件": "depPluginNpm",
   "用户 Skill": "userSkill",
+  "内置 Skill": "systemSkill",
+  "插件 Skill": "pluginSkill",
   "插件生命周期 Hooks": "pluginHooks",
   "项目级 Agent 规则": "projectAgentRules",
   "项目 Cursor/Claude 规则": "projectCursorRules",
@@ -95,6 +98,7 @@ const PURPOSE_ZH_TO_KEY: Record<string, string> = {
   "Codex 插件": "codexPlugin",
   "Codex 规则配置": "codexRules",
   "全局 Agent 规则": "codexGlobalRules",
+  "用户记忆": "userMemory",
 };
 
 /** 引擎 permission.name 固定中文 → data.permissionName 子键 */

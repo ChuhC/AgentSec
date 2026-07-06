@@ -209,14 +209,13 @@ def test_atr_targets_includes_settings(claude_layout):
     assert str(home / "skills" / "my-skill" / "SKILL.md") in targets
 
 
-def test_discover_project_rules_and_deps(claude_layout):
+def test_discover_deps(claude_layout):
     adapter = ClaudeAdapter()
     agent = adapter.detect()
     assert agent is not None
     assets = adapter.discover_assets(agent)
-    knowledge = [a for a in assets if a.type == AssetType.KNOWLEDGE.value]
-    assert any("CLAUDE.md" in a.name for a in knowledge)
-    assert any(".claude/rules" in a.name for a in knowledge)
+    assert not [a for a in assets if a.type == AssetType.KNOWLEDGE.value]
+    assert not [a for a in assets if a.type == AssetType.RULE.value]
     deps = [a for a in assets if a.type == AssetType.DEPENDENCY.value]
     assert len(deps) == 1
     assert deps[0].name == "@anthropic-ai/claude-code"
@@ -305,8 +304,7 @@ def test_marketplace_dict_format(claude_layout):
     adapter = ClaudeAdapter()
     agent = adapter.detect()
     assets = adapter.discover_assets(agent)
-    marketplaces = [a for a in assets if a.type == AssetType.KNOWLEDGE.value and "marketplace" in a.id]
-    assert any("custom-market" in a.name for a in marketplaces)
+    assert not [a for a in assets if a.type == AssetType.KNOWLEDGE.value]
 
 
 def test_plugin_id_at_marketplace_matches_cache(claude_layout):

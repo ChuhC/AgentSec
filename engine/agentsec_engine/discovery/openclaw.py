@@ -87,10 +87,36 @@ class OpenClawAdapter(AgentAdapter):
         )
 
     def _discover_skills(self, home: str, data: dict) -> List[Asset]:
+        sp = getattr(self, "_settings_path_cache", None) or self._real_config_path(home)
+        cfg_path = sp or os.path.join(home, "openclaw.json")
         roots = parsers.openclaw_skill_roots(home, data)
         roots = self._extend_skill_roots_from_cli(roots)
         assets = parsers.discover_skills_in_roots("openclaw", "OpenClaw", roots)
+        self._apply_openclaw_skill_entries(assets, cfg_path, data)
         return self._merge_skills_cli(assets)
+
+    def _apply_openclaw_skill_entries(
+        self, assets: List[Asset], cfg_path: str, data: dict
+    ) -> None:
+        """OpenClaw：skills.entries.<key>.enabled 写配置启停（非文件重命名）。"""
+        entries = ((data.get("skills") or {}).get("entries") or {})
+        if not isinstance(entries, dict):
+            entries = {}
+        for asset in assets:
+            md_path = asset.path
+            if not md_path or not md_path.endswith("SKILL.md"):
+                continue
+            fm = parsers.parse_skill_frontmatter(md_path)
+            entry_key = parsers.openclaw_skill_entry_key(fm, asset.name)
+            asset.install_path = md_path
+            asset.path = cfg_path
+            asset.config_key = f"skills:{entry_key}"
+            asset.can_disable = True
+            entry = entries.get(entry_key)
+            if isinstance(entry, dict) and entry.get("enabled") is False:
+                asset.status = ST.DISABLED.value
+            elif entry is False:
+                asset.status = ST.DISABLED.value
 
     def _extend_skill_roots_from_cli(
         self, roots: List[Tuple[str, str]]
@@ -209,7 +235,6 @@ class OpenClawAdapter(AgentAdapter):
                 package_name=npm_pkg,
                 can_disable=True,
                 can_uninstall=False,
-                can_update=bool(npm_pkg) and not disabled,
             ))
         return out
 
@@ -241,8 +266,9 @@ class OpenClawAdapter(AgentAdapter):
         ):
             add(mcp_path, SRC.MCP.value)
         for skill in self._discover_skills(home, data):
-            if skill.path and os.path.isfile(skill.path):
-                add(skill.path, SRC.SKILL.value)
+            skill_path = skill.install_path or skill.path
+            if skill_path and os.path.isfile(skill_path) and skill_path.endswith("SKILL.md"):
+                add(skill_path, SRC.SKILL.value)
         return out
 
     def _deps(self, home: str, _data: dict) -> List[Asset]:

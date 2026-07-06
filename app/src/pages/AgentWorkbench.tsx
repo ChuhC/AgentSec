@@ -14,6 +14,8 @@ import {
   exposureForAgent,
   flattenPermissionMatrixRows,
   groupPermissionsBySection,
+  PERM_RADAR_CATS,
+  visiblePermissions,
   isThreatIgnored,
   permissionsForMatrixCell,
   resolvePermissionLocate,
@@ -28,7 +30,6 @@ import type { Agent, Asset, AgentRuntime, CVEItem, ExposureFinding, PermissionEn
 import {
   IconArrowLeft,
   IconBolt,
-  IconBook,
   IconCube,
   IconFile,
   IconGlobe,
@@ -43,14 +44,13 @@ import {
 } from "../components/Icons";
 
 const SEV_W: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0, safe: 0 };
-const RADAR_CATS = ["文件", "Shell", "网络", "工具", "知识库"];
 const MAIN_TABS = ["概览", "态势拓扑", "权限管理", "资产管理", "威胁管理", "漏洞管理"] as const;
-const ASSET_SUB_TABS = ["MCP", "Skills", "Hooks", "知识库", "通道", "依赖"] as const;
+const ASSET_SUB_TABS = ["MCP", "Skills", "Hooks", "插件", "通道", "依赖"] as const;
 const ASSET_TAB_TYPE: Record<(typeof ASSET_SUB_TABS)[number], string> = {
   MCP: "mcp",
   Skills: "skill",
   Hooks: "hook",
-  知识库: "knowledge",
+  插件: "plugin",
   通道: "channel",
   依赖: "dependency",
 };
@@ -76,7 +76,7 @@ function assetSubTabLabel(tab: (typeof ASSET_SUB_TABS)[number], t: TFn): string 
     MCP: "assetMcp",
     Skills: "assetSkills",
     Hooks: "assetHooks",
-    知识库: "assetKnowledge",
+    插件: "assetPlugins",
     通道: "assetChannel",
     依赖: "assetDeps",
   };
@@ -142,6 +142,12 @@ export function AgentWorkbench({
   const assets = assetsByAgent(snapshot, agentId);
   const activeThreats = activeThreatCount(snapshot, agentId);
   const hue = agentHue(agent.kind);
+
+  useEffect(() => {
+    if (!ASSET_SUB_TABS.includes(assetSubTab)) {
+      setAssetSubTab("MCP");
+    }
+  }, [assetSubTab]);
 
   const goAssets = (sub: (typeof ASSET_SUB_TABS)[number] = "MCP", assetId?: string) => {
     setAssetSubTab(sub);
@@ -358,11 +364,11 @@ function Overview({
   updating: boolean;
 }) {
   const { t, layer } = useApp();
-  const perms: PermissionEntry[] = [
+  const perms = visiblePermissions([
     ...agent.permissions,
     ...assets.flatMap((a) => a.permissions),
-  ];
-  const radarAxes: RadarAxis[] = RADAR_CATS.map((cat) => {
+  ]);
+  const radarAxes: RadarAxis[] = PERM_RADAR_CATS.map((cat) => {
     const inCat = perms.filter((p) => p.category === cat);
     const max = inCat.reduce((m, p) => Math.max(m, SEV_W[p.severity]), 0);
     return { label: layer.permissionCategory(cat), score: max / 3 };
@@ -370,7 +376,6 @@ function Overview({
 
   const mcp = assets.filter((a) => a.type === "mcp").length;
   const skills = assets.filter((a) => a.type === "skill").length;
-  const knowledge = assets.filter((a) => a.type === "knowledge").length;
   const channels = assets.filter((a) => a.type === "channel").length;
 
   const vulnComponents = cveForAgent(snapshot, agentId).length;
@@ -416,7 +421,6 @@ function Overview({
   const assetStats = [
     { value: mcp, label: t("agentWorkbench.assetMcp"), color: "var(--purple-2)" },
     { value: skills, label: t("agentWorkbench.assetSkills"), color: "var(--purple-2)" },
-    { value: knowledge, label: t("agentWorkbench.assetKnowledge"), color: "var(--purple-2)" },
     { value: channels, label: t("agentWorkbench.assetChannel"), color: "var(--purple-2)" },
   ];
 
@@ -860,7 +864,7 @@ function PermissionManagementTab({
             onChange={(e) => setCatFilter(e.target.value)}
           >
             <option value="all">{t("agentWorkbench.permissionMatrixFilterDimension")}</option>
-            {RADAR_CATS.map((cat) => (
+            {PERM_RADAR_CATS.map((cat) => (
               <option key={cat} value={cat}>
                 {layer.permissionCategory(cat)}
               </option>
@@ -901,7 +905,7 @@ function PermissionManagementTab({
                 <thead>
                   <tr>
                     <th className="permission-matrix-sticky-col">{t("common.table.name")}</th>
-                    {RADAR_CATS.map((cat) => (
+                    {PERM_RADAR_CATS.map((cat) => (
                       <th key={cat} className="permission-matrix-cat-col">
                         {layer.permissionCategory(cat)}
                       </th>
@@ -934,7 +938,7 @@ function PermissionManagementTab({
                             </span>
                           </button>
                         </td>
-                        {RADAR_CATS.map((cat) => {
+                        {PERM_RADAR_CATS.map((cat) => {
                           const cellPerms = permissionsForMatrixCell(row.group, cat);
                           const hasPerm = cellPerms.length > 0;
                           return (
@@ -1043,7 +1047,6 @@ function permissionSectionTitle(key: PermissionSectionKey, t: TFn): string {
     mcp: t("agentWorkbench.assetMcp"),
     skill: t("agentWorkbench.assetSkills"),
     hook: t("agentWorkbench.assetHooks"),
-    knowledge: t("agentWorkbench.assetKnowledge"),
     channel: t("agentWorkbench.assetChannel"),
   };
   return map[key];
@@ -1306,7 +1309,6 @@ function permIcon(cat: string) {
   if (cat === "文件") return <IconFile size={17} />;
   if (cat === "Shell") return <IconTerminal size={17} />;
   if (cat === "网络") return <IconGlobe size={17} />;
-  if (cat === "知识库") return <IconBook size={17} />;
   return <IconDatabase size={17} />;
 }
 
@@ -1329,13 +1331,11 @@ function AssetTab({
   highlightAssetId?: string;
   onGoThreat: (findingId?: string) => void;
 }) {
-  const { updateAsset, disableAsset, enableAsset, uninstallAsset, settings, snapshot, t, layer } =
-    useApp();
+  const { snapshot, t, layer } = useApp();
   const [detailAsset, setDetailAsset] = useState<Asset | null>(null);
   const [depModal, setDepModal] = useState<Asset | null>(null);
   const [dependencyFilter, setDependencyFilter] = useState<DependencyFilter>("all");
   const [skillFilter, setSkillFilter] = useState<SkillFilter>("all");
-  const [confirm, setConfirm] = useState<{ kind: string; id: string } | null>(null);
 
   useEffect(() => {
     setDetailAsset(null);
@@ -1350,8 +1350,6 @@ function AssetTab({
 
   const isDep = typeLabel === "依赖";
   const isChannel = typeLabel === "通道";
-  const isKnowledge = typeLabel === "知识库";
-  const isMcpOrSkill = typeLabel === "MCP" || typeLabel === "Skills" || typeLabel === "Hooks";
   const isSkills = typeLabel === "Skills";
 
   const depCveCounts = useMemo(() => {
@@ -1426,17 +1424,6 @@ function AssetTab({
     setDepModal(asset);
   };
 
-  const doOp = (kind: string, id: string, needConfirm: boolean) => {
-    if (needConfirm) setConfirm({ kind, id });
-    else runOp(kind, id);
-  };
-  const runOp = (kind: string, id: string) => {
-    if (kind === "update") updateAsset(id);
-    else if (kind === "disable") disableAsset(id);
-    else if (kind === "enable") enableAsset(id);
-    else if (kind === "uninstall") uninstallAsset(id);
-  };
-
   return (
     <div className="asset-tab">
       <div className="card asset-tab-list">
@@ -1497,22 +1484,9 @@ function AssetTab({
               <tr>
                 <th>{t("common.table.name")}</th>
                 <th style={{ width: 110 }}>{t("common.table.status")}</th>
-                {!isKnowledge && (
-                  <th style={{ width: 100 }}>
-                    {isChannel ? t("agentWorkbench.colAccess") : t("common.table.version")}
-                  </th>
-                )}
-                {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
-                  <th style={{ width: 72 }}>{t("agentWorkbench.colUpdate")}</th>
-                )}
-                {!isDep && !isKnowledge && (
-                  <th style={{ width: 72 }}>
-                    {isMcpOrSkill ? t("agentWorkbench.colActions") : t("agentWorkbench.colDisable")}
-                  </th>
-                )}
-                {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
-                  <th style={{ width: 72 }}>{t("agentWorkbench.colUninstall")}</th>
-                )}
+                <th style={{ width: 100 }}>
+                  {isChannel ? t("agentWorkbench.colAccess") : t("common.table.version")}
+                </th>
                 {isDep && <th style={{ width: 100 }}>{t("agentWorkbench.colVuln")}</th>}
                 {isSkills && <th style={{ width: 72 }}>{t("agentWorkbench.colSkillScope")}</th>}
                 {isSkills && <th style={{ width: 88 }}>{t("agentWorkbench.colThreats")}</th>}
@@ -1556,42 +1530,7 @@ function AssetTab({
                       {st.label}
                     </span>
                   </td>
-                  {!isKnowledge && <td className="muted mono">{a.version || "—"}</td>}
-                  {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {a.can_update ? (
-                        <span
-                          className="update-pill"
-                          onClick={() => doOp("update", a.id, settings.confirmUpdate)}
-                        >
-                          {t("agentWorkbench.hasUpdate")}
-                        </span>
-                      ) : (
-                        <span className="dim">—</span>
-                      )}
-                    </td>
-                  )}
-                  {!isDep && !isKnowledge && (
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {a.status === "disabled" ? (
-                        <span
-                          className="act-link act-enable"
-                          onClick={() => doOp("enable", a.id, settings.confirmDisable)}
-                        >
-                          {t("common.action.enable")}
-                        </span>
-                      ) : a.can_disable ? (
-                        <span
-                          className="act-link act-disable"
-                          onClick={() => doOp("disable", a.id, settings.confirmDisable)}
-                        >
-                          {t("common.action.disable")}
-                        </span>
-                      ) : (
-                        <span className="dim">—</span>
-                      )}
-                    </td>
-                  )}
+                  <td className="muted mono">{a.version || "—"}</td>
                   {isSkills && (
                     <td>
                       <span
@@ -1604,22 +1543,6 @@ function AssetTab({
                       >
                         {skillScopeLabel(a.skill_scope, t)}
                       </span>
-                    </td>
-                  )}
-                  {!isDep && !isChannel && !isMcpOrSkill && !isKnowledge && (
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {a.can_uninstall ? (
-                        <span
-                          className="act-link act-uninstall"
-                          onClick={() => doOp("uninstall", a.id, settings.confirmUninstall)}
-                        >
-                          {t("agentWorkbench.colUninstall")}
-                        </span>
-                      ) : (
-                        <span className="dim" title={t("agentWorkbench.manualOnly")}>
-                          —
-                        </span>
-                      )}
                     </td>
                   )}
                   {isDep && (
@@ -1704,35 +1627,6 @@ function AssetTab({
         />
       )}
 
-      {confirm && (
-        <ConfirmModal
-          title={
-            confirm.kind === "uninstall"
-              ? t("agentWorkbench.confirmUninstallTitle")
-              : confirm.kind === "update"
-                ? t("agentWorkbench.confirmUpdateTitle")
-                : confirm.kind === "enable"
-                  ? t("agentWorkbench.confirmEnableTitle")
-                  : t("agentWorkbench.confirmDisableTitle")
-          }
-          message={
-            confirm.kind === "uninstall"
-              ? t("agentWorkbench.confirmUninstallMsg")
-              : confirm.kind === "update"
-                ? t("agentWorkbench.confirmUpdateMsg")
-                : confirm.kind === "enable"
-                  ? t("agentWorkbench.confirmEnableMsg")
-                  : t("agentWorkbench.confirmDisableMsg")
-          }
-          confirmLabel={confirm.kind === "uninstall" ? t("agentWorkbench.confirmUninstallAction") : t("common.action.confirm")}
-          danger={confirm.kind === "uninstall"}
-          onConfirm={() => {
-            runOp(confirm.kind, confirm.id);
-            setConfirm(null);
-          }}
-          onCancel={() => setConfirm(null)}
-        />
-      )}
     </div>
   );
 }
@@ -1957,8 +1851,6 @@ function AssetDetailPanel({
       <IconCube size={20} />
     ) : typeLabel === "Skills" ? (
       <IconBolt size={20} />
-    ) : typeLabel === "知识库" ? (
-      <IconBook size={20} />
     ) : typeLabel === "通道" ? (
       <IconGlobe size={20} />
     ) : (
@@ -1990,7 +1882,7 @@ function AssetDetailPanel({
         )}
       </div>
 
-      {(typeLabel === "MCP" || typeLabel === "Skills" || typeLabel === "知识库") && (
+      {(typeLabel === "MCP" || typeLabel === "Skills") && (
         <AssetPermissionsSection permissions={asset.permissions} t={t} />
       )}
 
@@ -2040,13 +1932,14 @@ function AssetPermissionsSection({
   t: TFn;
 }) {
   const { layer } = useApp();
+  const visible = visiblePermissions(permissions);
   return (
     <div className="asset-detail-perms">
       <div className="asset-detail-perms-head">{t("agentWorkbench.permissions")}</div>
-      {permissions.length === 0 ? (
+      {visible.length === 0 ? (
         <div className="asset-detail-perms-empty muted">{t("agentWorkbench.noPermissions")}</div>
       ) : (
-        permissions.map((p) => (
+        visible.map((p) => (
           <div key={p.id} className="row asset-perm-row">
             <span className="asset-perm-icon">{permIcon(p.category)}</span>
             <div className="asset-perm-body">

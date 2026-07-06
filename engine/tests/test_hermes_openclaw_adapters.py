@@ -79,6 +79,24 @@ def test_hermes_atr_targets_includes_mcp_json(hermes_layout):
     assert targets[skill_path] == "skill"
 
 
+def test_openclaw_skill_config_enable_disable(openclaw_layout):
+    home, ws = openclaw_layout
+    cfg_path = home / "openclaw.json"
+    data = json.loads(cfg_path.read_text(encoding="utf-8"))
+    data.setdefault("skills", {}).setdefault("entries", {})["oc-skill"] = {"enabled": False}
+    cfg_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    adapter = OpenClawAdapter()
+    agent = adapter.detect()
+    assert agent is not None
+    assets = adapter.discover_assets(agent)
+    skill = next(a for a in assets if a.name == "oc-skill")
+    assert skill.status == "disabled"
+    assert skill.can_disable is True
+    assert skill.config_key == "skills:oc-skill"
+    assert skill.install_path.endswith("SKILL.md")
+
+
 def test_openclaw_atr_targets_includes_workspace_mcp_json(openclaw_layout):
     home, ws = openclaw_layout
     adapter = OpenClawAdapter()

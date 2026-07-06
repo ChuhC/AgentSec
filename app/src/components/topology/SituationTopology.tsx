@@ -4,36 +4,9 @@ import "reactflow/dist/style.css";
 import type { ScanSnapshot } from "../../types";
 import { useApp } from "../../store";
 import { buildTopology, type TopoNode } from "./topologyBuilder";
+import { computeTopologyLayout, edgeHandles, isOrthogonalAligned, touchesAgent } from "./topologyLayout";
 import { topoNodeTypes } from "./TopologyNodes";
 import "./topology.css";
-
-interface LayoutPos { x: number; y: number; }
-
-const LAYOUT: Record<string, LayoutPos> = {
-  agent:               { x: 420, y: 340 },
-  "cat:mcp":           { x: 130, y: 210 },
-  "cat:skill":         { x: 130, y: 440 },
-  "cat:knowledge":     { x: 420, y: 150 },
-  "cat:channel":       { x: 710, y: 340 },
-  "cat:hook":          { x: 130, y: 340 },
-  "cat:dependency":    { x: 340, y: 620 },
-  "risk:threat-mcp":   { x: 130, y: 290 },
-  "risk:threat-skill": { x: 130, y: 530 },
-  "risk:threat-agent": { x: 580, y: 530 },
-  "risk:cve":          { x: 340, y: 720 },
-  "cat:perm-agent":       { x: 620, y: 450 },
-  "cat:perm-cat:mcp":     { x: -90, y: 210 },
-  "cat:perm-cat:skill":   { x: -90, y: 440 },
-  "cat:perm-cat:hook":    { x: -90, y: 340 },
-  "cat:perm-cat:knowledge": { x: 620, y: 150 },
-  "cat:perm-cat:channel": { x: 710, y: 440 },
-};
-
-type NavigateTarget = {
-  tab: "权限管理" | "威胁管理" | "漏洞管理" | "资产管理";
-  permSource?: string;
-  assetSubTab?: string;
-};
 
 function centerToPos(cx: number, cy: number, w: number, h: number) {
   return { x: cx - w / 2, y: cy - h / 2 };
@@ -50,12 +23,18 @@ function nodeSize(n: TopoNode): { w: number; h: number } {
   }
 }
 
+type NavigateTarget = {
+  tab: "权限管理" | "威胁管理" | "漏洞管理" | "资产管理";
+  permSource?: string;
+  assetSubTab?: string;
+};
+
 const PERM_NODE_TO_SOURCE: Record<string, string> = {
   agent: "agent_default",
   "cat:mcp": "mcp",
   "cat:skill": "skill",
   "cat:hook": "hook",
-  "cat:knowledge": "knowledge",
+  "cat:plugin": "plugin",
   "cat:channel": "channel",
 };
 
@@ -78,7 +57,8 @@ export function navigateTopoNode(id: string, onNavigate: (target: NavigateTarget
     return;
   }
   const assetTabs: Record<string, string> = {
-    "cat:mcp": "MCP", "cat:skill": "Skills", "cat:knowledge": "知识库",
+    "cat:mcp": "MCP", "cat:skill": "Skills",
+    "cat:plugin": "插件",
     "cat:hook": "Hooks", "cat:channel": "通道",
   };
   if (assetTabs[id]) {
@@ -95,7 +75,8 @@ export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }:
   const { t } = useApp();
   const topoLabels = useMemo(
     () => ({
-      knowledge: t("topology.knowledge"),
+      rules: t("topology.rules"),
+      plugins: t("topology.plugins"),
       channel: t("topology.channel"),
       permissions: t("topology.permissions"),
       component: t("topology.component"),
@@ -109,6 +90,8 @@ export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }:
     [snapshot, agentId, agentLabel, topoLabels]
   );
 
+  const layout = useMemo(() => computeTopologyLayout(topo.nodes), [topo.nodes]);
+
   const visibleNodeIds = useMemo(() => new Set(topo.nodes.map((n) => n.id)), [topo.nodes]);
   const visibleEdges = useMemo(() => {
     return topo.edges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
@@ -116,14 +99,9 @@ export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }:
 
   const nodes = useMemo(() => {
     return topo.nodes.map((n) => {
-      let cx: number, cy: number;
-      if (n.id.startsWith("cat:perm-")) {
-        cx = LAYOUT[n.id]?.x ?? 520;
-        cy = LAYOUT[n.id]?.y ?? 440;
-      } else {
-        cx = LAYOUT[n.id]?.x ?? 520;
-        cy = LAYOUT[n.id]?.y ?? 340;
-      }
+      const pos = layout.get(n.id);
+      const cx = pos?.x ?? 500;
+      const cy = pos?.y ?? 340;
       const { w, h } = nodeSize(n);
       const rfType = n.type === "component" ? "category" : n.type;
       return {
@@ -136,16 +114,21 @@ export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }:
         zIndex: n.id === "cat:dependency" ? 20 : 0,
       } as Node;
     });
-  }, [topo.nodes]);
+  }, [topo.nodes, layout]);
 
   const edges: Edge[] = useMemo(() => {
     return visibleEdges.map((e) => {
       const isRisk = e.risk;
       const c = isRisk ? "#FB7185" : "#818CF8";
+      const handles = edgeHandles(e.source, e.target, layout, topo.nodes);
+      const agentEdge = touchesAgent(e.source, e.target);
+      const aligned = isOrthogonalAligned(e.source, e.target, layout);
       return {
         id: e.id, source: e.source, target: e.target,
-        sourceHandle: e.sourceHandle ?? undefined, targetHandle: e.targetHandle ?? undefined,
-        type: "smoothstep",
+        sourceHandle: e.sourceHandle ?? handles.sourceHandle,
+        targetHandle: e.targetHandle ?? handles.targetHandle,
+        type: agentEdge && aligned ? "straight" : "step",
+        ...(agentEdge && aligned ? {} : { pathOptions: { borderRadius: 0 } }),
         animated: isRisk,
         interactionWidth: 0,
         style: {
@@ -157,7 +140,7 @@ export function SituationTopology({ agentId, agentLabel, snapshot, onNavigate }:
         },
       };
     });
-  }, [visibleEdges]);
+  }, [visibleEdges, layout, topo.nodes]);
 
   // 容器级点击委托：通过 data-topo-id 识别节点，避免 ReactFlow 内部层拦截
   const pointerDown = useRef<{ x: number; y: number } | null>(null);

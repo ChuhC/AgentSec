@@ -123,6 +123,7 @@ const zh = {
     tableEvent: "威胁事件",
     sourceAgentConfig: "Agent 配置",
     sourceKnowledge: "知识库",
+    sourceRule: "规则",
     sourceOpenclawAudit: "OpenClaw 审计",
     ignoreTitle: "忽略此威胁",
     ignoreMessage: "将「{title}」加入忽略列表，风险等级将标记为安全，概览统计会同步更新。",
@@ -206,6 +207,8 @@ const zh = {
     assetSkills: "Skills",
     assetHooks: "Hooks",
     assetKnowledge: "知识库",
+    assetRules: "规则",
+    assetPlugins: "插件",
     assetChannel: "通道",
     assetDeps: "依赖",
     tabTopology: "态势拓扑",
@@ -295,6 +298,8 @@ const zh = {
 
   topology: {
     knowledge: "知识库",
+    rules: "规则",
+    plugins: "插件",
     channel: "通道",
     permissions: "权限",
     component: "组件",
@@ -439,6 +444,8 @@ const zh = {
       channelMode: "模式 {mode}",
       channelCreds: "凭证引用：{creds}",
       userSkill: "用户 Skill",
+      systemSkill: "内置 Skill",
+      pluginSkill: "插件 Skill",
       pluginHooks: "插件生命周期 Hooks",
       projectAgentRules: "项目级 Agent 规则",
       projectCursorRules: "项目 Cursor/Claude 规则",
@@ -447,6 +454,7 @@ const zh = {
       codexPlugin: "Codex 插件",
       codexRules: "Codex 规则配置",
       codexGlobalRules: "全局 Agent 规则",
+      userMemory: "用户记忆",
     },
     pending: {
       threatHigh: { label: "威胁高危待处理", detail: "安全规则与暴露面发现" },
@@ -680,6 +688,7 @@ const en: StringTree<typeof zh> = {
     tableEvent: "Threat",
     sourceAgentConfig: "Agent config",
     sourceKnowledge: "Knowledge base",
+    sourceRule: "Rules",
     sourceOpenclawAudit: "OpenClaw audit",
     ignoreTitle: "Ignore this threat",
     ignoreMessage:
@@ -764,6 +773,8 @@ const en: StringTree<typeof zh> = {
     assetSkills: "Skills",
     assetHooks: "Hooks",
     assetKnowledge: "Knowledge",
+    assetRules: "Rules",
+    assetPlugins: "Plugins",
     assetChannel: "Channels",
     assetDeps: "Dependencies",
     tabTopology: "Topology",
@@ -853,6 +864,8 @@ const en: StringTree<typeof zh> = {
 
   topology: {
     knowledge: "Knowledge",
+    rules: "Rules",
+    plugins: "Plugins",
     channel: "Channels",
     permissions: "Permissions",
     component: "Components",
@@ -1014,6 +1027,8 @@ const en: StringTree<typeof zh> = {
       channelMode: "Mode {mode}",
       channelCreds: "Credentials: {creds}",
       userSkill: "User skill",
+      systemSkill: "Bundled skill",
+      pluginSkill: "Plugin skill",
       pluginHooks: "Plugin lifecycle hooks",
       projectAgentRules: "Project-level agent rules",
       projectCursorRules: "Project Cursor/Claude rules",
@@ -1022,6 +1037,7 @@ const en: StringTree<typeof zh> = {
       codexPlugin: "Codex plugin",
       codexRules: "Codex rules configuration",
       codexGlobalRules: "Global agent rules",
+      userMemory: "User memory",
     },
     pending: {
       threatHigh: { label: "High-severity threats pending", detail: "From security rules and exposure checks" },

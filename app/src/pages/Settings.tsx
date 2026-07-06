@@ -5,7 +5,6 @@ import type { ThemeSetting } from "../theme";
 import {
   IconSettings,
   IconScan,
-  IconCube,
   IconAlert,
 } from "../components/Icons";
 import { UpdateSettings } from "../components/UpdateSettings";
@@ -54,24 +53,6 @@ export function Settings() {
             label={t("settings.cveOnline")}
             value={settings.cveOnline}
             onChange={(v) => setSettings({ cveOnline: v })}
-          />
-        </Group>
-
-        <Group icon={<IconCube size={18} />} title={t("settings.assets")}>
-          <SwitchRow
-            label={t("settings.confirmUpdate")}
-            value={settings.confirmUpdate}
-            onChange={(v) => setSettings({ confirmUpdate: v })}
-          />
-          <SwitchRow
-            label={t("settings.confirmUninstall")}
-            value={settings.confirmUninstall}
-            onChange={(v) => setSettings({ confirmUninstall: v })}
-          />
-          <SwitchRow
-            label={t("settings.confirmDisable")}
-            value={settings.confirmDisable}
-            onChange={(v) => setSettings({ confirmDisable: v })}
           />
         </Group>
 

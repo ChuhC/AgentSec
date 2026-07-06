@@ -62,7 +62,8 @@ function countHV(threats: any[]) {
 }
 
 export interface TopologyLabels {
-  knowledge: string;
+  rules: string;
+  plugins: string;
   channel: string;
   permissions: string;
   component: string;
@@ -94,35 +95,35 @@ export function buildTopology(
   const mcp = assets.filter((a) => a.type === "mcp");
   if (mcp.length) {
     nodes.push({ id: "cat:mcp", type: "category", label: "MCP", count: mcp.length, color: C.blue, icon: `${ICONS}/mcp.png` });
-    edges.push({ id: "e:mcp-agent", source: "cat:mcp", target: "agent", sourceHandle: "right", targetHandle: "left" });
+    edges.push({ id: "e:mcp-agent", source: "cat:mcp", target: "agent" });
   }
 
   // ---- Skills ----
   const skills = assets.filter((a) => a.type === "skill");
   if (skills.length) {
     nodes.push({ id: "cat:skill", type: "category", label: "Skills", count: skills.length, color: C.green, icon: `${ICONS}/skills.png` });
-    edges.push({ id: "e:skill-agent", source: "cat:skill", target: "agent", sourceHandle: "right", targetHandle: "left" });
+    edges.push({ id: "e:skill-agent", source: "cat:skill", target: "agent" });
   }
 
-  // ---- Knowledge ----
-  const know = assets.filter((a) => a.type === "knowledge");
-  if (know.length) {
-    nodes.push({ id: "cat:knowledge", type: "category", label: labels.knowledge, count: know.length, color: "#14B8A6", icon: `${ICONS}/knowledge.png` });
-    edges.push({ id: "e:know-agent", source: "cat:knowledge", target: "agent", sourceHandle: "bottom", targetHandle: "top" });
+  // ---- Plugins ----
+  const plugins = assets.filter((a) => a.type === "plugin");
+  if (plugins.length) {
+    nodes.push({ id: "cat:plugin", type: "category", label: labels.plugins, count: plugins.length, color: "#6366F1", icon: `${ICONS}/hook.png` });
+    edges.push({ id: "e:plugin-agent", source: "cat:plugin", target: "agent" });
   }
 
   // ---- Channel ----
   const ch = assets.filter((a) => a.type === "channel");
   if (ch.length) {
     nodes.push({ id: "cat:channel", type: "category", label: labels.channel, count: ch.length, color: C.cyan, icon: `${ICONS}/channel.png` });
-    edges.push({ id: "e:channel-agent", source: "cat:channel", target: "agent", sourceHandle: "left", targetHandle: "target-right" });
+    edges.push({ id: "e:channel-agent", source: "cat:channel", target: "agent" });
   }
 
   // ---- Hook ----
   const hooks = assets.filter((a) => a.type === "hook");
   if (hooks.length) {
     nodes.push({ id: "cat:hook", type: "category", label: "Hook", count: hooks.length, color: C.yellow, icon: `${ICONS}/hook.png` });
-    edges.push({ id: "e:hook-agent", source: "cat:hook", target: "agent", sourceHandle: "top", targetHandle: "left" });
+    edges.push({ id: "e:hook-agent", source: "cat:hook", target: "agent" });
   }
 
   // ---- Permissions → 按来源拆分挂载到各分类节点 ----
@@ -148,7 +149,7 @@ export function buildTopology(
     let parentId = "agent";
     if (source === "mcp" && mcp.length) parentId = "cat:mcp";
     else if (source === "skill" && skills.length) parentId = "cat:skill";
-    else if (source === "knowledge" && know.length) parentId = "cat:knowledge";
+    else if (source === "plugin" && plugins.length) parentId = "cat:plugin";
     else if (source === "hook" && hooks.length) parentId = "cat:hook";
     else if (source === "channel" && ch.length) parentId = "cat:channel";
     (permByParent[parentId] ??= []).push(entry);
@@ -167,21 +168,9 @@ export function buildTopology(
       color: C.yellow, icon: `${ICONS}/perm.png`,
       permHigh: pH, permMed: pM,
     });
-    // Position-aware handles — edges stay pure horizontal or vertical, no crossings
-    let srcHandle = "bottom";
-    let tgtHandle = "target-top";
-    if (parentId === "cat:mcp" || parentId === "cat:skill" || parentId === "cat:hook") {
-      srcHandle = "left";
-      tgtHandle = "target-right";
-    } else if (parentId === "cat:knowledge") {
-      srcHandle = "right";
-      tgtHandle = "target-left";
-    }
-    // agent & cat:channel → default bottom / target-top
     edges.push({
       id: `e:perm-${parentId}`,
       source: parentId, target: nodeId,
-      sourceHandle: srcHandle, targetHandle: tgtHandle,
       dashed: true, risk: false,
     });
   }
@@ -193,13 +182,13 @@ export function buildTopology(
       id: "cat:dependency", type: "component", label: labels.component, count: deps.length,
       color: C.gray, icon: `${ICONS}/component.png`,
     });
-    edges.push({ id: "e:agent-dep", source: "agent", target: "cat:dependency", sourceHandle: "bottom", targetHandle: "top" });
+    edges.push({ id: "e:agent-dep", source: "agent", target: "cat:dependency" });
   }
 
   // ---- CVE ----
   if (totalCve > 0) {
     nodes.push({ id: "risk:cve", type: "risk", label: labels.cveVuln, count: totalCve, color: C.orange, icon: `${ICONS}/cve.png`, status: "risk" });
-    edges.push({ id: "e:cve", source: "cat:dependency", target: "risk:cve", sourceHandle: "bottom", targetHandle: "top", dashed: true, risk: true });
+    edges.push({ id: "e:cve", source: "cat:dependency", target: "risk:cve", dashed: true, risk: true });
   }
 
   // ---- 威胁 → 按来源拆分 ----
@@ -211,7 +200,7 @@ export function buildTopology(
     if (!threats.length) return;
     const { h, m: med } = countHV(threats);
     nodes.push({ id, type: "risk", label: labels.threat, count: threats.length, color: C.red, icon: `${ICONS}/risk.png`, threatHigh: h, threatMed: med, status: "risk" });
-    edges.push({ id: `e:threat-${id}`, source: parent, target: id, sourceHandle: "bottom", targetHandle: "top", dashed: true, risk: true });
+    edges.push({ id: `e:threat-${id}`, source: parent, target: id, dashed: true, risk: true });
   }
 
   if (mcp.length) addThreatNode("risk:threat-mcp", threatMCP, "cat:mcp");

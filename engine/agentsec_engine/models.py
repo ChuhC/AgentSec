@@ -26,6 +26,8 @@ class AssetType(str, Enum):
     SKILL = "skill"
     HOOK = "hook"
     KNOWLEDGE = "knowledge"
+    RULE = "rule"
+    PLUGIN = "plugin"
     DEPENDENCY = "dependency"
     CHANNEL = "channel"
 
@@ -43,6 +45,7 @@ class FindingSource(str, Enum):
     MCP = "mcp"
     AGENT_CONFIG = "agent_config"
     KNOWLEDGE = "knowledge"
+    RULE = "rule"
     OPENCLAW_AUDIT = "openclaw_audit"
 
 
@@ -97,7 +100,7 @@ class Asset:
     permissions: List[PermissionEntry] = field(default_factory=list)
     can_update: bool = False
     can_disable: bool = True
-    can_uninstall: bool = True
+    can_uninstall: bool = False
 
     def to_dict(self) -> Dict:
         d = asdict(self)
@@ -239,5 +242,7 @@ class ScanSnapshot:
             "mcp": sum(1 for a in self.assets if a.type == AssetType.MCP.value),
             "skills": sum(1 for a in self.assets if a.type == AssetType.SKILL.value),
             "knowledge": sum(1 for a in self.assets if a.type == AssetType.KNOWLEDGE.value),
+            "rules": sum(1 for a in self.assets if a.type == AssetType.RULE.value),
+            "plugins": sum(1 for a in self.assets if a.type == AssetType.PLUGIN.value),
             "updatable": sum(1 for a in self.assets if a.status == AssetStatus.UPDATABLE.value),
         }

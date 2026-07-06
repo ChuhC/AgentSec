@@ -72,68 +72,11 @@ class HermesAdapter(AgentAdapter):
         return (
             self._mcp(home, cfg)
             + self._skills(home)
-            + self._knowledge(home, cfg)
             + self._deps(home)
             + parsers.discover_channels(
                 "hermes", "Hermes", cfg, os.path.join(home, "config.yaml"), roots=("platforms",)
             )
         )
-
-    def _knowledge(self, home: str, cfg: dict) -> List[Asset]:
-        out: List[Asset] = []
-        mem = cfg.get("memory") or {}
-        if mem.get("memory_enabled"):
-            provider = str(mem.get("provider") or "default")
-            name = f"Agent Memory ({provider})"
-            out.append(Asset(
-                id=f"hermes-kb-memory-{provider}",
-                agent_id="hermes",
-                type=AT.KNOWLEDGE.value,
-                name=name,
-                version="1.0.0",
-                status=ST.ENABLED.value,
-                purpose="会话记忆与用户画像存储",
-                source="Hermes",
-                permissions=[
-                    parsers.perm(
-                        f"hermes-kb-mem-{provider}",
-                        "knowledge",
-                        SRC.KNOWLEDGE,
-                        name,
-                    )
-                ],
-                path=os.path.join(home, "config.yaml"),
-                config_key="memory",
-                can_disable=False,
-                can_uninstall=False,
-                can_update=False,
-            ))
-        curator = cfg.get("curator") or {}
-        if curator.get("enabled"):
-            out.append(Asset(
-                id="hermes-kb-curator",
-                agent_id="hermes",
-                type=AT.KNOWLEDGE.value,
-                name="Session Curator",
-                version="1.0.0",
-                status=ST.ENABLED.value,
-                purpose="归档与整理历史会话、知识片段",
-                source="Hermes",
-                permissions=[
-                    parsers.perm(
-                        "hermes-kb-curator",
-                        "knowledge",
-                        SRC.KNOWLEDGE,
-                        "Session Curator",
-                    )
-                ],
-                path=os.path.join(home, "config.yaml"),
-                config_key="curator",
-                can_disable=False,
-                can_uninstall=False,
-                can_update=False,
-            ))
-        return out
 
     def _mcp(self, home: str, cfg: dict) -> List[Asset]:
         out = []
@@ -149,7 +92,6 @@ class HermesAdapter(AgentAdapter):
             install_path = None
             manager = None
             package_name = None
-            can_update = False
             if npm_pkg:
                 package_name = npm_pkg
                 manager = "npm"
@@ -161,7 +103,6 @@ class HermesAdapter(AgentAdapter):
                 version = str(pkg_data.get("version", "")) or None
                 version = parsers.installed_npm_version(npm_pkg, search) or version
                 install_path = search or None
-                can_update = True
             else:
                 env = srv.get("env") or {}
                 node_path = str(env.get("NODE_PATH", ""))
@@ -172,7 +113,6 @@ class HermesAdapter(AgentAdapter):
                         manager = "npm"
                         install_path = node_path
                         version = str(pkg_data.get("version", "")) or version
-                        can_update = True
                 for arg in srv.get("args") or []:
                     if str(arg).endswith((".mjs", ".js")):
                         script = str(arg)
@@ -193,7 +133,6 @@ class HermesAdapter(AgentAdapter):
                 install_path=install_path or (str((srv.get("env") or {}).get("NODE_PATH", "")) or None),
                 package_name=package_name,
                 can_disable=True, can_uninstall=False,
-                can_update=can_update and not disabled,
             ))
         return out
 
@@ -219,7 +158,7 @@ class HermesAdapter(AgentAdapter):
                 purpose=str(fm.get("description", "")) or "本机技能", source="Hermes",
                 skill_scope="user",
                 permissions=perms, path=md,
-                can_disable=True, can_uninstall=False,  # 删目录危险，灰显需手动
+                can_disable=False, can_uninstall=False,
             ))
         out.sort(key=lambda a: a.name.lower())
         return out
@@ -227,20 +166,16 @@ class HermesAdapter(AgentAdapter):
     def _deps(self, home: str) -> List[Asset]:
         agent_dir = os.path.join(home, "hermes-agent")
         deps = parsers.deps_from_npm_workspace(agent_dir, "hermes")
-        # 真实 npm 管理上下文：更新/卸载经包管理器（强确认在 UI 侧）
+        # 真实 npm 管理上下文（仅用于版本/CVE 定位，不提供更新/卸载操作）
         for d in deps:
             if d.ecosystem == "npm":
                 d.manager = "npm"
                 d.install_path = agent_dir
                 d.package_name = d.name
-                d.can_update = True
-                d.can_uninstall = True
             elif d.ecosystem == "PyPI":
                 d.manager = "pip"
                 d.install_path = agent_dir
                 d.package_name = d.name
-                d.can_update = True
-                d.can_uninstall = True
             d.can_disable = False
         return deps
 
