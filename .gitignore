@@ -6,12 +6,16 @@ app/node_modules/
 app/dist/
 app/dist-electron/
 app/release/
+app/coverage/
 
 # Python
 engine/.venv/
 engine/**/__pycache__/
 engine/*.egg-info/
 engine/.pytest_cache/
+engine/.coverage
+engine/coverage.xml
+engine/test-results/
 *.pyc
 
 # 打包产物（PyInstaller / electron-builder）

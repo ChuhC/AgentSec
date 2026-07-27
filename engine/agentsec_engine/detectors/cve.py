@@ -50,7 +50,12 @@ _SEV_TEXT = {
     "MEDIUM": Severity.MEDIUM.value,
     "LOW": Severity.LOW.value,
 }
-_SEV_RANK = {Severity.HIGH.value: 3, Severity.MEDIUM.value: 2, Severity.LOW.value: 1}
+_SEV_RANK = {
+    Severity.HIGH.value: 3,
+    Severity.MEDIUM.value: 2,
+    Severity.LOW.value: 1,
+    Severity.INFO.value: 0,
+}
 
 
 def _cvss_score(vectors: List[str]) -> float:
@@ -74,6 +79,8 @@ def _cvss_score(vectors: List[str]) -> float:
 
 
 def _severity_from(vuln: dict, cvss: float) -> str:
+    if vuln.get("_agentsec_incomplete"):
+        return Severity.INFO.value
     text = (vuln.get("database_specific") or {}).get("severity")
     if text and text.upper() in _SEV_TEXT:
         return _SEV_TEXT[text.upper()]
@@ -83,7 +90,7 @@ def _severity_from(vuln: dict, cvss: float) -> str:
         return Severity.MEDIUM.value
     if cvss > 0:
         return Severity.LOW.value
-    return Severity.LOW.value
+    return Severity.INFO.value
 
 
 def _vuln_ids(vuln: dict) -> Tuple[str, str]:
@@ -116,6 +123,8 @@ def _vuln_is_stub(vuln: dict) -> bool:
 
 
 def _vuln_summary(vuln: dict) -> str:
+    if vuln.get("_agentsec_incomplete"):
+        return "漏洞详情获取失败，风险等级与修复版本待确认。"
     text = (vuln.get("summary") or vuln.get("details") or "").strip()
     if len(text) > 8000:
         return text[:8000] + "…"
@@ -132,6 +141,14 @@ def _looks_like_version(val: str) -> bool:
     if not val or _GIT_SHA_RE.match(val):
         return False
     return bool(_SEMVER_START_RE.match(val))
+
+
+def _query_version(val: str) -> str:
+    """OSV 生态版本使用规范化发布号；仅对数字版本移除展示用 v 前缀。"""
+    text = str(val or "").strip()
+    if re.match(r"^[vV]\d", text):
+        return text[1:]
+    return text
 
 
 def _fixed_version_from_refs(vuln: dict) -> Optional[str]:
@@ -244,6 +261,9 @@ def _vulns_to_cves(vulns: List[dict]) -> List[CVEItem]:
                 summary=_vuln_summary(v),
                 advisory_id=advisory,
                 reference_url=_reference_url(v),
+                data_status=(
+                    "incomplete" if v.get("_agentsec_incomplete") else "complete"
+                ),
             )
         )
     dedup: dict = {}
@@ -294,6 +314,12 @@ class RemoteOSVProvider(CVEProvider):
     def __init__(self, online: bool = True):
         # online=False 可强制模拟离线（演示 CVE 不可用态）
         self.online = online and config.cve_online(default=online)
+        self.last_diagnostics = {
+            "queried": 0,
+            "skipped": 0,
+            "detail_errors": 0,
+            "result_mismatch": False,
+        }
 
     def _fetch_vuln(self, vuln_id: str) -> dict:
         url = OSV_VULN_URL + urllib.parse.quote(vuln_id, safe="")
@@ -331,7 +357,11 @@ class RemoteOSVProvider(CVEProvider):
                     try:
                         cache[vid] = fut.result()
                     except Exception:  # noqa: BLE001
-                        cache[vid] = {"id": vid}
+                        cache[vid] = {
+                            "id": vid,
+                            "_agentsec_incomplete": True,
+                        }
+                        self.last_diagnostics["detail_errors"] += 1
 
         out: List[dict] = []
         for v in vulns:
@@ -341,7 +371,10 @@ class RemoteOSVProvider(CVEProvider):
 
     def _query_one(self, name: str, version: str, ecosystem: str) -> List[dict]:
         body = json.dumps(
-            {"version": version, "package": {"name": name, "ecosystem": ecosystem}}
+            {
+                "version": _query_version(version),
+                "package": {"name": name, "ecosystem": ecosystem},
+            }
         ).encode("utf-8")
         req = urllib.request.Request(
             OSV_URL, data=body, headers={"Content-Type": "application/json"}
@@ -368,7 +401,7 @@ class RemoteOSVProvider(CVEProvider):
                 {
                     "queries": [
                         {
-                            "version": ver,
+                            "version": _query_version(ver),
                             "package": {"name": name, "ecosystem": eco},
                         }
                         for name, ver, eco in chunk
@@ -394,7 +427,16 @@ class RemoteOSVProvider(CVEProvider):
         dependencies: List[Asset],
         should_cancel: Optional[Callable[[], bool]] = None,
     ) -> Tuple[List[CVEFinding], str]:
+        self.last_diagnostics = {
+            "queried": 0,
+            "skipped": 0,
+            "detail_errors": 0,
+            "result_mismatch": False,
+        }
+        if not dependencies:
+            return [], CVEStatus.OK.value
         if not self.online:
+            self.last_diagnostics["skipped"] = len(dependencies)
             return [], CVEStatus.UNAVAILABLE.value
 
         indexed: List[Tuple[Asset, str]] = []
@@ -405,6 +447,8 @@ class RemoteOSVProvider(CVEProvider):
             if not ecosystem or not dep.version:
                 continue
             indexed.append((dep, ecosystem))
+        self.last_diagnostics["queried"] = len(indexed)
+        self.last_diagnostics["skipped"] = len(dependencies) - len(indexed)
 
         if not indexed:
             return [], CVEStatus.OK.value
@@ -426,6 +470,11 @@ class RemoteOSVProvider(CVEProvider):
         if should_cancel and should_cancel():
             return [], CVEStatus.OK.value
 
+        if len(vulns_list) != len(indexed):
+            self.last_diagnostics["result_mismatch"] = True
+            if len(vulns_list) < len(indexed):
+                vulns_list.extend([[] for _ in range(len(indexed) - len(vulns_list))])
+
         findings: List[CVEFinding] = []
         for (dep, eco), vulns in zip(indexed, vulns_list):
             try:
@@ -436,12 +485,24 @@ class RemoteOSVProvider(CVEProvider):
                 findings.append(finding)
 
         findings.sort(key=lambda f: _SEV_RANK.get(f.severity, 0), reverse=True)
-        return findings, CVEStatus.OK.value
+        partial = bool(
+            self.last_diagnostics["detail_errors"]
+            or self.last_diagnostics["result_mismatch"]
+        )
+        return findings, (
+            CVEStatus.PARTIAL.value if partial else CVEStatus.OK.value
+        )
 
 
 class CVEDetector:
     def __init__(self, provider: Optional[CVEProvider] = None):
         self.provider = provider or RemoteOSVProvider(online=True)
+        self.last_diagnostics = {
+            "queried": 0,
+            "skipped": 0,
+            "detail_errors": 0,
+            "result_mismatch": False,
+        }
 
     def scan(
         self,
@@ -449,6 +510,18 @@ class CVEDetector:
         should_cancel: Optional[Callable[[], bool]] = None,
     ) -> Tuple[List[CVEFinding], str]:
         try:
-            return self.provider.query(dependencies, should_cancel=should_cancel)
+            result = self.provider.query(
+                dependencies, should_cancel=should_cancel
+            )
+            self.last_diagnostics = dict(
+                getattr(self.provider, "last_diagnostics", self.last_diagnostics)
+            )
+            return result
         except Exception:  # noqa: BLE001 - 兜底：异常视为 CVE 不可用
+            self.last_diagnostics = {
+                "queried": 0,
+                "skipped": len(dependencies),
+                "detail_errors": 0,
+                "result_mismatch": False,
+            }
             return [], CVEStatus.UNAVAILABLE.value

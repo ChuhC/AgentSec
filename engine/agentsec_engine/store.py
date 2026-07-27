@@ -1,4 +1,4 @@
-"""SnapshotStore：SQLite 持久化，仅保留最近一次完整快照（NF-D1）。
+"""SnapshotStore：SQLite 持久化，仅保留最近一次已完成扫描快照（NF-D1）。
 
 策略（architecture.md 四·1）：
 - 扫描完成 → replace 覆盖唯一快照行
@@ -14,8 +14,9 @@ import sqlite3
 import threading
 from typing import Optional
 
-from .models import ScanSnapshot
+from .models import CVEStatus, ScanSnapshot, ScanStatus
 from .paths import default_data_dir, safe_normalize_readable_path
+from .reporter import redact_snapshot_dict
 from .threat_whitelist import apply_default_whitelist_to_snapshot
 
 
@@ -42,6 +43,21 @@ class SnapshotStore:
                 """
             )
             self._conn.commit()
+            row = self._conn.execute(
+                "SELECT payload FROM snapshot WHERE id = 1"
+            ).fetchone()
+            if row:
+                try:
+                    parsed = json.loads(row[0])
+                    redacted = redact_snapshot_dict(parsed)
+                    if redacted != parsed:
+                        self._conn.execute(
+                            "UPDATE snapshot SET payload = ? WHERE id = 1",
+                            (json.dumps(redacted, ensure_ascii=False),),
+                        )
+                        self._conn.commit()
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    pass
 
     def commit_replace(self, snapshot: ScanSnapshot) -> None:
         """扫描完成：覆盖唯一快照。"""
@@ -56,6 +72,7 @@ class SnapshotStore:
                 k for k in prev["ignored_threat_keys"] if k in valid
             ]
         apply_default_whitelist_to_snapshot(snap_dict)
+        snap_dict = redact_snapshot_dict(snap_dict)
         payload = json.dumps(snap_dict, ensure_ascii=False)
         with self._lock:
             self._conn.execute("DELETE FROM snapshot")
@@ -165,6 +182,7 @@ class SnapshotStore:
                 break
         else:
             return None
+        snap = redact_snapshot_dict(snap)
         payload = json.dumps(snap, ensure_ascii=False)
         with self._lock:
             self._conn.execute("UPDATE snapshot SET payload = ? WHERE id = 1", (payload,))
@@ -173,6 +191,7 @@ class SnapshotStore:
 
     def write_full(self, snap: dict) -> dict:
         """覆盖写入完整快照 dict（供 AssetManager 卸载等整体改写）。"""
+        snap = redact_snapshot_dict(snap)
         payload = json.dumps(snap, ensure_ascii=False)
         with self._lock:
             self._conn.execute("UPDATE snapshot SET payload = ? WHERE id = 1", (payload,))
@@ -182,8 +201,11 @@ class SnapshotStore:
     def patch_agent_discovery(
         self, agent_id: str, agent_dict: dict, assets: list,
         cve_findings: Optional[list] = None,
+        replace_all_cve_findings: bool = False,
+        cve_status: Optional[str] = None,
+        cve_diagnostics: Optional[dict] = None,
     ) -> Optional[dict]:
-        """单 Agent 资产刷新：更新 agent 字段并替换该 agent 的资产列表。"""
+        """单 Agent 资产刷新，并原子同步其 CVE 结果与扫描完整性元数据。"""
         snap = self.load()
         if not snap:
             return None
@@ -201,10 +223,37 @@ class SnapshotStore:
             a for a in snap.get("assets", []) if a.get("agent_id") != agent_id
         ] + assets
         if cve_findings is not None:
-            snap["cve_findings"] = [
-                f for f in snap.get("cve_findings", [])
-                if agent_id not in f.get("agent_ids", [])
-            ] + cve_findings
+            if replace_all_cve_findings:
+                snap["cve_findings"] = cve_findings
+            else:
+                snap["cve_findings"] = [
+                    f for f in snap.get("cve_findings", [])
+                    if agent_id not in f.get("agent_ids", [])
+                ] + cve_findings
+        meta = snap.setdefault("meta", {})
+        adapter_status = meta.setdefault("adapter_status", {})
+        adapter_status[agent_id] = "ok"
+        if cve_status is not None:
+            meta["cve_status"] = cve_status
+        if cve_diagnostics is not None:
+            meta["cve_scanned_count"] = int(cve_diagnostics.get("queried") or 0)
+            meta["cve_skipped_count"] = int(cve_diagnostics.get("skipped") or 0)
+            meta["cve_detail_error_count"] = int(
+                cve_diagnostics.get("detail_errors") or 0
+            )
+        has_adapter_error = any(
+            str(value).startswith("error") for value in adapter_status.values()
+        )
+        if not snap.get("agents"):
+            meta["scan_status"] = ScanStatus.NO_AGENTS.value
+        elif (
+            has_adapter_error
+            or meta.get("exposure_status", "ok") != "ok"
+            or meta.get("cve_status", CVEStatus.OK.value) != CVEStatus.OK.value
+        ):
+            meta["scan_status"] = ScanStatus.PARTIAL.value
+        else:
+            meta["scan_status"] = ScanStatus.COMPLETE.value
         return self.write_full(snap)
 
     def close(self) -> None:

@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, Menu } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu } from "electron";
 import { spawn, ChildProcessWithoutNullStreams } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { engineChildEnv, isDebugEnabled, resolveEngine } from "./config";
 import { initAutoUpdater } from "./updater";
+import { pickScanDirectory } from "./scanDirectory";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -226,6 +227,14 @@ function createWindow() {
 
 ipcMain.handle("engine-request", async (_e, method: string, params: any) => {
   return engineRequest(method, params);
+});
+
+ipcMain.handle("scan-directory.choose", async () => {
+  return pickScanDirectory((options) =>
+    win && !win.isDestroyed()
+      ? dialog.showOpenDialog(win, options)
+      : dialog.showOpenDialog(options)
+  );
 });
 
 app.whenReady().then(() => {

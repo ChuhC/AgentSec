@@ -156,7 +156,7 @@ MVP 覆盖 **P1 + P2**；P3 完整修复指引后置，但威胁输出须含 sev
 
 ### 业务指标
 
-MVP 阶段以可交付桌面版与 2 个 Adapter 可用为主，不设商业 KPI。
+MVP 阶段以可交付桌面版与 4 个 Adapter（Hermes、OpenClaw、Claude Code、Codex）可用为主，不设商业 KPI。
 
 ### 技术指标（Phase 2 Step A 已确认）
 

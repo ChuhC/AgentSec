@@ -9,6 +9,7 @@ import type {
   ScanSnapshot,
   Severity,
 } from "./types";
+import { computeSecurityScore } from "./securityScore";
 
 const SEV_WEIGHT: Record<Severity, number> = {
   high: 3,
@@ -319,21 +320,6 @@ export function riskCategoryBreakdownForAgent(
   return [...map.entries()]
     .map(([category, v]) => ({ category, ...v }))
     .sort((a, b) => b.count - a.count || SEV_WEIGHT[b.maxSeverity] - SEV_WEIGHT[a.maxSeverity]);
-}
-
-/** 综合安全评分（0–100）：递减扣分，避免多命中时直接归零 */
-function computeSecurityScore(high: number, med: number, low: number, cveHigh: number): number {
-  const threatDeduction = Math.min(75, high * 4 + med * 2 + low * 1);
-  const cveDeduction = Math.min(25, cveHigh * 6);
-  return Math.max(15, Math.min(100, 100 - threatDeduction - cveDeduction));
-}
-
-/** 扫描结果页 · 综合安全评分（0–100，威胁 + 高危 CVE） */
-export function scanSecurityScore(s: ScanSnapshot): number {
-  const exp = exposureCounts(s);
-  const cve = cveCounts(s);
-  const cveHigh = s.meta.cve_status === "ok" ? cve.high : 0;
-  return computeSecurityScore(exp.high, exp.medium, exp.low, cveHigh);
 }
 
 /** Agent 工作台 · 整体安全评分（0–100） */

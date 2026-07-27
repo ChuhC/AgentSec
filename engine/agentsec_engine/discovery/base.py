@@ -28,17 +28,38 @@ class AgentAdapter:
 
     def resolve_home(self) -> Optional[str]:
         """按优先级定位该 Agent 的配置家目录；都不存在返回 None。"""
+        if self.scope_path is not None:
+            # 自定义范围是硬边界：未命中时不能悄悄回退到配置或用户主目录。
+            normalized_scope = os.path.realpath(os.path.expanduser(self.scope_path))
+            candidate = (
+                normalized_scope
+                if os.path.basename(normalized_scope) == f".{self.kind}"
+                else os.path.join(normalized_scope, f".{self.kind}")
+            )
+            return candidate if os.path.isdir(candidate) else None
         candidates: List[str] = []
         env = get_agent_home(self.kind)
         if env:
             candidates.append(env)
-        if self.scope_path:
-            candidates.append(os.path.join(self.scope_path, f".{self.kind}"))
         candidates.append(os.path.join(os.path.expanduser("~"), f".{self.kind}"))
         for c in candidates:
             if c and os.path.isdir(c):
                 return c
         return None
+
+    def path_in_scope(self, path: Optional[str]) -> bool:
+        """路径是否位于自定义扫描根内；全机扫描始终允许。"""
+        if self.scope_path is None:
+            return True
+        if not path:
+            return False
+        scope = os.path.realpath(os.path.expanduser(self.scope_path))
+        candidate = os.path.realpath(os.path.expanduser(str(path)))
+        try:
+            return os.path.commonpath([scope, candidate]) == scope
+        except ValueError:
+            # Windows 不同盘符等情况。
+            return False
 
     def detect(self) -> Optional[Agent]:
         """探测本机是否存在该 Agent；不存在返回 None。"""

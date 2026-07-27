@@ -15,7 +15,7 @@
 
 **Early preview** — Actively evolving; UI and APIs may change. Issues and PRs welcome.
 
-AgentSec is a **macOS-first desktop security scanner** for **local AI agents**. It currently supports **Hermes**, **OpenClaw**, **Claude Code**, and **Codex**, with more agents on the roadmap. It does not replace your agents; it runs a local health check: surface misconfigurations and risky skills, match dependencies against known CVEs, and let you manage MCP servers, Skills, knowledge bases, and packages in one place — **no cloud, no telemetry, no account**.
+AgentSec is a **macOS-first desktop security scanner** for **local AI agents**. It currently supports **Hermes**, **OpenClaw**, **Claude Code**, and **Codex**, with more agents on the roadmap. It does not replace your agents; it runs a local health check: surface misconfigurations and risky skills, match dependencies against known CVEs, and inventory MCP servers, Skills, knowledge bases, and packages in one place — **no cloud, no telemetry, no account**.
 
 ![Scan results](docs/screenshots/en/02-results.png)
 
@@ -49,11 +49,11 @@ AgentSec is a **macOS-first desktop security scanner** for **local AI agents**. 
 
 **Vulnerability management** — OSV-backed correlation between dependency versions and known CVEs, rolled up per component with CVSS, blast radius, and fix versions. Exposure and CVE pipelines are decoupled: a failed CVE feed does not block exposure results.
 
-**Asset discovery & response** — Per-agent adapters (Hermes, OpenClaw, Claude Code, and Codex today; more coming) inventory local MCP servers, skills, knowledge bases, and package dependencies. Supports update, disable, and uninstall with configurable confirmation gates.
+**Asset discovery** — Per-agent adapters (Hermes, OpenClaw, Claude Code, and Codex today; more coming) inventory local MCP servers, skills, knowledge bases, and package dependencies, grouped by agent for review and risk correlation.
 
 **Permission posture** — Normalizes declared permissions from agents and attached assets across file, shell, network, tool, and knowledge-base categories; a **permission matrix** compares capability coverage per component, and **radar charts** compare agents to spot over-privileged or risky capability mixes.
 
-**Unified operations** — Fleet-wide security score, remediation queue, and per-agent workbench tie together threat review, CVE tracking, and asset ops. The **Situation topology** tab renders an interactive 2D graph of each agent's MCP, Skills, permissions, threats, components, and CVE links — click any node to jump to the filtered list.
+**Unified review** — Fleet-wide security score, remediation queue, and per-agent workbench tie together threat review, CVE tracking, and asset inventory. The **Situation topology** tab renders an interactive 2D graph of each agent's MCP, Skills, permissions, threats, components, and CVE links — click any node to jump to the filtered list.
 
 **Local trust boundary** — Scan, persist, and render entirely on-device. Snapshots are redacted for credential-like fields before storage. No telemetry and no cloud account required.
 
@@ -164,6 +164,14 @@ npm run dist:win       # electron-builder → NSIS (run on Windows)
 
 Mirror for electron-builder binaries (optional):  
 `ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/"`
+
+#### Quality gates
+
+Pull requests and main-branch pushes run frontend tests and production builds,
+Python 3.10–3.12 engine tests, branch coverage, and frozen-engine scans on Linux
+and Windows. Release builds reuse the same workflow and cannot start until it
+passes. See [docs/testing.md](docs/testing.md) for thresholds, local commands,
+and the ATR accuracy-corpus policy.
 
 ---
 

@@ -53,7 +53,16 @@ class CVEStatus(str, Enum):
     """CVE 管线状态：联网失败时 unavailable（NF-A2）。"""
 
     OK = "ok"
+    PARTIAL = "partial"
     UNAVAILABLE = "unavailable"
+
+
+class ScanStatus(str, Enum):
+    """扫描完整性状态；安全评分只对 complete 快照有效。"""
+
+    COMPLETE = "complete"
+    PARTIAL = "partial"
+    NO_AGENTS = "no_agents"
 
 
 def _enum_value(v):
@@ -165,6 +174,7 @@ class CVEItem:
     summary: str
     advisory_id: str = ""  # OSV/GHSA 原始编号（与 cve_id 不同时展示）
     reference_url: str = ""  # 公告/NVD 详情页
+    data_status: str = "complete"  # complete | incomplete
 
 
 @dataclass
@@ -193,8 +203,15 @@ class ScanMeta:
     finished_at: str = ""
     duration_seconds: int = 0
     scope: str = "本机全部"
+    scan_status: str = ScanStatus.COMPLETE.value
+    adapter_status: Dict[str, str] = field(default_factory=dict)
+    exposure_status: str = "ok"  # ok | partial | unavailable
+    exposure_timed_out_count: int = 0
+    exposure_read_error_count: int = 0
     cve_status: str = CVEStatus.OK.value
     cve_scanned_count: int = 0
+    cve_skipped_count: int = 0
+    cve_detail_error_count: int = 0
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -202,7 +219,7 @@ class ScanMeta:
 
 @dataclass
 class ScanSnapshot:
-    """最近一次完整扫描快照（脱敏后）。SnapshotStore 唯一读源。"""
+    """最近一次已完成扫描快照（含完整性状态，脱敏后）。SnapshotStore 唯一读源。"""
 
     schema_version: int = 1
     meta: ScanMeta = field(default_factory=ScanMeta)

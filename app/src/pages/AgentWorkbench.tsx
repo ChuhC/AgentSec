@@ -23,7 +23,6 @@ import {
   type PermissionSourceGroup,
 } from "../selectors";
 import { Radar, RadarAxis } from "../components/Radar";
-import { SituationTopology } from "../components/topology/SituationTopology";
 
 import { SeverityPill, ConfirmModal, useSeverityLabels } from "../components/common";
 import type { Agent, Asset, AgentRuntime, CVEItem, ExposureFinding, PermissionEntry, ScanSnapshot, Severity } from "../types";
@@ -42,6 +41,12 @@ import {
   IconShield,
   IconShieldBadge,
 } from "../components/Icons";
+
+const SituationTopology = React.lazy(() =>
+  import("../components/topology/SituationTopology").then((module) => ({
+    default: module.SituationTopology,
+  }))
+);
 
 const SEV_W: Record<Severity, number> = { high: 3, medium: 2, low: 1, info: 0, safe: 0 };
 const MAIN_TABS = ["概览", "态势拓扑", "权限管理", "资产管理", "威胁管理", "漏洞管理"] as const;
@@ -324,12 +329,14 @@ export function AgentWorkbench({
       )}
       {tab === "漏洞管理" && <VulnList agentId={agentId} embedded />}
       {tab === "态势拓扑" && (
-        <SituationTopology
-          agentId={agentId}
-          agentLabel={agent ? agent.name : agentId}
-          snapshot={snapshot}
-          onNavigate={handleTopoNavigate}
-        />
+        <React.Suspense fallback={<div className="muted">{t("scanning.ringPreparing")}</div>}>
+          <SituationTopology
+            agentId={agentId}
+            agentLabel={agent ? agent.name : agentId}
+            snapshot={snapshot}
+            onNavigate={handleTopoNavigate}
+          />
+        </React.Suspense>
       )}
     </main>
   );

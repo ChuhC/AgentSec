@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld("agentsec", {
   platform: process.platform,
   request: (method, params) =>
     ipcRenderer.invoke("engine-request", method, params ?? {}),
+  chooseDirectory: () => ipcRenderer.invoke("scan-directory.choose"),
   onEvent: (cb) => {
     const listener = (_e, payload) => cb(payload);
     ipcRenderer.on("engine-event", listener);

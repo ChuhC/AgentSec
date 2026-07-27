@@ -17,12 +17,15 @@ pyatr 需 Python ≥ 3.10；导入失败时自动降级，由上层回落到 fix
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
+import queue
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
-from typing import Callable, Dict, FrozenSet, List, Optional, Tuple
+from typing import Callable, Dict, FrozenSet, List, Optional, Set, Tuple
 
 import yaml
 
@@ -66,12 +69,126 @@ def _load_excluded_rule_ids() -> FrozenSet[str]:
 
 _EXCLUDED_RULE_IDS = _load_excluded_rule_ids()
 
-# 单文件喂给 ATR 的最大字符数（性能护栏；注入特征通常靠前）
-_MAX_SCAN_CHARS = 65536
+# 单文件 ATR 最长执行时间。第三方规则使用 Python re，必须放到可终止的子进程中，
+# 否则灾难性回溯会占住整个扫描线程且无法取消。
+_ATR_FILE_TIMEOUT_SECONDS = 12.0
 
 # SKILL.md YAML frontmatter 剥离（--- ... ---），避免元数据 boilerplate 误报
 _FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n?", re.DOTALL)
 _MIN_SKILL_BODY_CHARS = 32
+
+_DEFENSIVE_CONTEXT_RE = re.compile(
+    r"(?i)\b(?:security guidance|architecture note|example(?:s)? to block|"
+    r"detect(?:ion)?|prevent|mitigat|defend|never|do not|don't|must not|avoid)\b"
+)
+_OVERRIDE_INTENT_RE = re.compile(
+    r"(?i)\b(?:ignore|disregard|override|replace|forget)\b.{0,100}"
+    r"\b(?:previous|prior|system|developer|tool)\b"
+)
+_DISCLOSURE_INTENT_RE = re.compile(
+    r"(?i)\b(?:reveal|show|print|output|extract|leak|repeat)\b.{0,100}\bsystem prompt\b"
+)
+_CREDENTIAL_TARGET_RE = re.compile(
+    r"(?i)(?:~/)?\.(?:ssh|aws|env)|credentials?|keychain|id_rsa|secret manager"
+)
+_THEFT_INTENT_RE = re.compile(
+    r"(?i)\b(?:read|copy|steal|collect|harvest|exfiltrat|upload|send|post)\b"
+)
+_EXFIL_INTENT_RE = re.compile(
+    r"(?i)\b(?:exfiltrat|upload|send|post|transmit|webhook|attacker)\b"
+)
+_REMOTE_EXEC_RE = re.compile(
+    r"""(?isx)
+    (?:
+      \b(?:curl|wget)\b[^\n]{0,240}https?://
+      (?!127\.0\.0\.1|localhost|\[?::1\]?)[^\s|;]+[^\n]{0,320}
+      (?:
+        \|\s*(?:/[^\s|;]+/)?(?:ba|z|da)?sh\b
+        |&&\s*(?:/[^\s|;]+/)?(?:ba|z|da)?sh\b
+        |\b(?:chmod\s+\+x|execute)\b[^\n]{0,160}(?:/tmp/|\./)
+      )
+      |
+      \bpython(?:3)?\b
+      (?=[^\n]{0,640}\bexec\s*\()
+      (?=[^\n]{0,640}\b(?:urlopen|requests?\.get)\b)
+      [^\n]{0,640}https?://
+      (?!127\.0\.0\.1|localhost|\[?::1\]?)[^\s'"]+
+    )
+    """
+)
+_TOOL_SHADOW_RE = re.compile(
+    r"(?is)\bIMPORTANT\b.{0,120}(?:"
+    r"\bbefore\s+(?:using|calling)\s+(?:any\s+)?other\s+tool\b|"
+    r"\bignore\b.{0,80}\b(?:other|its|their|tool)\b.{0,40}\binstructions?\b)"
+)
+_CHAR_ENCODING_RE = re.compile(r"(?:\\[A-Za-z0-9]){8,}")
+_PERSONA_BYPASS_RE = re.compile(
+    r"(?i)\b(?:jailbreak|uncensored|DAN|evil persona|bypass safety|ignore safety|disable safety)\b"
+)
+_MULTI_TURN_INJECTION_RE = re.compile(
+    r"(?i)\b(?:in (?:the )?(?:next|future) (?:message|turn)|remember this instruction|"
+    r"when I (?:later )?say|defer(?:red)? instruction)\b"
+)
+_VARIABLE_INJECTION_RE = re.compile(
+    r"(?is)\b(?:user input|prompt|payload)\b.{0,180}"
+    r"\b(?:ignore|override|replace|system prompt|instructions?)\b"
+)
+_BACKUP_HARVEST_RE = re.compile(
+    r"(?is)\b(?:backup|restore)\b.{0,180}\b(?:credential|token|api key|secret|password)\b"
+    r".{0,180}\b(?:send|upload|post|webhook|remote)\b"
+)
+_PIGGYBACK_EXFIL_RE = re.compile(
+    r"(?is)\b(?:by the way|also|one more thing|casually)\b.{0,180}"
+    r"\b(?:secret|token|credential|api key)\b.{0,180}\b(?:send|upload|post|webhook)\b"
+)
+
+
+def _matched_context(text: str, patterns, radius: int = 320) -> str:
+    for pattern in patterns or []:
+        try:
+            match = re.search(pattern, text)
+        except re.error:
+            continue
+        if match:
+            return text[max(0, match.start() - radius): min(len(text), match.end() + radius)]
+    return text if len(text) <= radius * 2 else ""
+
+
+def _suppress_noisy_static_match(rule_id: str, text: str, patterns, source: str) -> bool:
+    """为已知宽泛规则增加意图组合条件，避免文档词汇本身触发高危。"""
+    context = _matched_context(text, patterns)
+    defensive = bool(_DEFENSIVE_CONTEXT_RE.search(context))
+    if rule_id == "ATR-2026-00120":
+        return "ascii-guard-ignore" in context.lower()
+    if rule_id == "ATR-2026-00213":
+        return defensive or not _OVERRIDE_INTENT_RE.search(context)
+    if rule_id == "ATR-2026-00514":
+        return defensive or not _DISCLOSURE_INTENT_RE.search(context)
+    if rule_id == "ATR-2026-00113":
+        return not (_CREDENTIAL_TARGET_RE.search(context) and _THEFT_INTENT_RE.search(context))
+    if rule_id == "ATR-2026-00115":
+        return not _EXFIL_INTENT_RE.search(context)
+    if rule_id == "ATR-2026-00161":
+        return not _TOOL_SHADOW_RE.search(context)
+    if rule_id == "ATR-2026-00121":
+        return not _REMOTE_EXEC_RE.search(context)
+    if rule_id == "ATR-2026-00454":
+        return not _CHAR_ENCODING_RE.search(context)
+    if rule_id == "ATR-2026-00245":
+        return not _PERSONA_BYPASS_RE.search(context)
+    if rule_id == "ATR-2026-00446":
+        return not _VARIABLE_INJECTION_RE.search(context)
+    if rule_id == "ATR-2026-00217":
+        return not _BACKUP_HARVEST_RE.search(context)
+    if rule_id == "ATR-2026-00005":
+        return not _MULTI_TURN_INJECTION_RE.search(context)
+    if rule_id == "ATR-2026-00142":
+        return not _PIGGYBACK_EXFIL_RE.search(context)
+    if rule_id in {"ATR-2026-00528", "ATR-2026-00419"} and source == FindingSource.SKILL.value:
+        return True
+    if rule_id == "ATR-2026-00524":
+        return not re.search(r"(?i)ANTHROPIC_(?:API_KEY|AUTH_TOKEN)", text)
+    return False
 
 # ATR 类别（kebab）→ agentSec 中文类别
 _CAT_ZH = {
@@ -125,10 +242,28 @@ def _map_severity(atr_sev: str) -> str:
 
 
 def _preprocess_skill_text(path: str, text: str) -> str:
-    """剥离 SKILL.md YAML frontmatter，仅扫描正文。"""
+    """屏蔽 SKILL.md YAML frontmatter，同时保留原始换行以保证行号准确。"""
     if not path.endswith("SKILL.md"):
         return text
-    return _FRONTMATTER_RE.sub("", text, count=1).strip()
+    match = _FRONTMATTER_RE.match(text)
+    if not match:
+        return text
+    masked = "".join("\n" if ch == "\n" else " " for ch in match.group(0))
+    return masked + text[match.end():]
+
+
+def _allowed_targets_for_source(source: str) -> Set[str]:
+    if source == FindingSource.SKILL.value:
+        return {"skill", "both"}
+    if source == FindingSource.MCP.value:
+        return {"mcp", "both"}
+    # Agent 配置、规则和知识库没有对应的 ATR scan_target，只运行明确标记为 both 的规则。
+    return {"both"}
+
+
+def _rule_matches_source(rule, source: str) -> bool:
+    tags = getattr(rule, "tags", None) or {}
+    return tags.get("scan_target") in _allowed_targets_for_source(source)
 
 
 def _locate(text: str, patterns) -> Tuple[str, str]:
@@ -206,11 +341,12 @@ class ATREngine:
             ):
                 self._subset_ids.add(r.id)
         self._subset_ids -= _EXCLUDED_RULE_IDS
+        self._subset_rules = [
+            r for r in self._engine.rules if r.id in self._subset_ids
+        ]
         # 性能：原地裁剪规则列表，evaluate 只跑子集（459 → ~266，详见 atr-mvp-rules.md）。
         try:
-            self._engine._rules[:] = [
-                r for r in self._engine._rules if r.id in self._subset_ids
-            ]
+            self._engine._rules[:] = self._subset_rules
         except Exception:  # noqa: BLE001 - 裁剪失败则退回全量+结果过滤
             pass
 
@@ -219,21 +355,92 @@ class ATREngine:
         return len(self._subset_ids)
 
     def scan_file(
-        self, path: str, text: str, source: str, agent_ids: List[str]
+        self,
+        path: str,
+        text: str,
+        source: str,
+        agent_ids: List[str],
+        *,
+        include_supplemental: bool = True,
     ) -> List[ExposureFinding]:
         if not self.available or not text:
             return []
-        # 截断超大文件，防止个别规则正则在大文本上退化（性能护栏）
-        if len(text) > _MAX_SCAN_CHARS:
-            text = text[:_MAX_SCAN_CHARS]
+        allowed_ids = {
+            r.id for r in self._subset_rules if _rule_matches_source(r, source)
+        }
+        try:
+            self._engine._rules[:] = [
+                r for r in self._subset_rules if r.id in allowed_ids
+            ]
+        except Exception:  # noqa: BLE001
+            pass
         event = _AgentEvent(content=text, fields={"content": text})
         out: List[ExposureFinding] = []
         seen = set()
         for m in self._engine.evaluate(event):
-            if m.rule_id not in self._subset_ids or m.rule_id in seen:
+            if m.rule_id not in allowed_ids or m.rule_id in seen:
+                continue
+            if _suppress_noisy_static_match(
+                m.rule_id, text, getattr(m, "matched_patterns", None), source
+            ):
                 continue
             seen.add(m.rule_id)
             out.append(self._to_finding(m, path, text, source, agent_ids))
+        if include_supplemental:
+            out.extend(self.supplemental_findings(path, text, source, agent_ids, seen))
+        return out
+
+    def supplemental_findings(self, path, text, source, agent_ids, seen=None):
+        seen = seen or set()
+        out: List[ExposureFinding] = []
+        checks = [
+            (
+                "AGENTSEC-STATIC-REMOTE-EXEC",
+                "ATR-2026-00121",
+                _REMOTE_EXEC_RE,
+                "远程脚本下载并执行",
+                "Skill 风险",
+                "检测到从非本机地址下载内容并直接交给 Shell 执行。",
+                "不要直接执行远程脚本；固定版本与校验和，并在隔离环境中审查后运行。",
+                "远程下载内容未经审查就执行，可能导致任意代码运行。",
+                "remote-exec",
+            ),
+            (
+                "AGENTSEC-STATIC-TOOL-SHADOWING",
+                "ATR-2026-00161",
+                _TOOL_SHADOW_RE,
+                "工具优先级劫持指令",
+                "工具投毒",
+                "检测到要求忽略其他工具指令并强制优先调用当前工具的内容。",
+                "移除跨工具优先级指令，并核查该工具的来源与最小权限。",
+                "工具描述试图改变其他工具的调用顺序，可能劫持 Agent 行为。",
+                "tool-shadowing",
+            ),
+        ]
+        for fid, equivalent_id, pattern, title, category, impact, recommendation, plain, tag in checks:
+            if fid in seen or equivalent_id in seen:
+                continue
+            m = pattern.search(text)
+            if not m:
+                continue
+            line = text.count("\n", 0, m.start()) + 1
+            loc = f"{path}:{line}"
+            snippet = m.group(0).replace("\n", " ").strip()[:160]
+            out.append(ExposureFinding(
+                id=fid,
+                title=title,
+                severity=Severity.HIGH.value,
+                category=category,
+                source=source,
+                agent_ids=list(agent_ids),
+                impact=impact,
+                evidence=f"{loc}\n命中片段：{snippet}",
+                recommendation=recommendation,
+                plain_explanation=plain,
+                location=loc,
+                locations=[loc],
+                tags=[tag],
+            ))
         return out
 
     def _to_finding(self, m, path, text, source, agent_ids) -> ExposureFinding:
@@ -331,6 +538,8 @@ class OpenClawAuditCollector:
             if not isinstance(it, dict):
                 continue
             check_id = str(it.get("checkId") or it.get("id") or it.get("check") or "OPENCLAW")
+            if check_id.startswith("summary.") or str(it.get("type", "")).lower() == "summary":
+                continue
             sev = _AUDIT_SEV.get(str(it.get("severity", "")).lower(), Severity.MEDIUM.value)
             path = it.get("path") or it.get("file") or ""
             line = it.get("line")
@@ -363,6 +572,127 @@ class ScanTarget:
         self.agent_ids = agent_ids
 
 
+def _atr_worker_main(
+    requests,
+    responses,
+    include_experimental: bool,
+    high_severity_only: bool,
+) -> None:
+    """独立 ATR worker；父进程可在单条规则卡死时安全终止。"""
+    engine = ATREngine(
+        include_experimental=include_experimental,
+        high_severity_only=high_severity_only,
+    )
+    while True:
+        job = requests.get()
+        if job is None:
+            return
+        job_id, path, text, source, agent_ids = job
+        try:
+            findings = engine.scan_file(
+                path,
+                text,
+                source,
+                agent_ids,
+                include_supplemental=False,
+            )
+            responses.put((job_id, "ok", [f.to_dict() for f in findings]))
+        except BaseException as exc:  # noqa: BLE001 - 错误需回传父进程并隔离
+            responses.put((job_id, "error", f"{type(exc).__name__}: {exc}"))
+
+
+class _ATRProcessWorker:
+    """单 worker 复用规则加载；超时或取消时直接终止进程。"""
+
+    def __init__(self, include_experimental: bool, high_severity_only: bool):
+        self.include_experimental = include_experimental
+        self.high_severity_only = high_severity_only
+        self._ctx = multiprocessing.get_context("spawn")
+        self._process = None
+        self._requests = None
+        self._responses = None
+        self._job_id = 0
+
+    def _start(self) -> None:
+        self._requests = self._ctx.Queue()
+        self._responses = self._ctx.Queue()
+        self._process = self._ctx.Process(
+            target=_atr_worker_main,
+            args=(
+                self._requests,
+                self._responses,
+                self.include_experimental,
+                self.high_severity_only,
+            ),
+            daemon=True,
+        )
+        self._process.start()
+
+    def _terminate(self) -> None:
+        if self._process is not None and self._process.is_alive():
+            self._process.terminate()
+        if self._process is not None:
+            self._process.join(timeout=2)
+            if self._process.is_alive():
+                self._process.kill()
+                self._process.join(timeout=1)
+        for q in (self._requests, self._responses):
+            if q is not None:
+                q.close()
+        self._process = None
+        self._requests = None
+        self._responses = None
+
+    def scan(
+        self,
+        target: ScanTarget,
+        text: str,
+        *,
+        timeout: float,
+        should_cancel: Optional[Callable[[], bool]],
+    ) -> Tuple[str, List[ExposureFinding], str]:
+        if self._process is None or not self._process.is_alive():
+            self._terminate()
+            self._start()
+        self._job_id += 1
+        job_id = self._job_id
+        self._requests.put(
+            (job_id, target.path, text, target.source, target.agent_ids)
+        )
+        deadline = time.monotonic() + timeout
+        while True:
+            if should_cancel and should_cancel():
+                self._terminate()
+                return "cancelled", [], ""
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._terminate()
+                return "timeout", [], ""
+            if self._process is None or not self._process.is_alive():
+                self._terminate()
+                return "error", [], "ATR worker exited unexpectedly"
+            try:
+                result_id, status, payload = self._responses.get(
+                    timeout=min(0.1, remaining)
+                )
+            except queue.Empty:
+                continue
+            if result_id != job_id:
+                continue
+            if status != "ok":
+                return "error", [], str(payload)
+            return "ok", [ExposureFinding(**item) for item in payload], ""
+
+    def close(self) -> None:
+        if self._process is not None and self._process.is_alive():
+            try:
+                self._requests.put(None)
+                self._process.join(timeout=2)
+            except (OSError, ValueError):
+                pass
+        self._terminate()
+
+
 class ExposureDetector:
     def __init__(
         self,
@@ -370,11 +700,19 @@ class ExposureDetector:
         include_experimental: bool = True,
         high_severity_only: bool = True,
     ):
+        self.include_experimental = include_experimental
+        self.high_severity_only = high_severity_only
         self.atr = ATREngine(
             include_experimental=include_experimental,
             high_severity_only=high_severity_only,
         )
         self.audit = OpenClawAuditCollector()
+        self.last_diagnostics = {
+            "status": "ok" if self.atr.available else "unavailable",
+            "timed_out_paths": [],
+            "read_error_paths": [],
+            "worker_errors": [],
+        }
 
     def scan(
         self,
@@ -382,37 +720,102 @@ class ExposureDetector:
         targets: List[ScanTarget],
         on_file_progress: Optional[Callable[[int, int], None]] = None,
         should_cancel: Optional[Callable[[], bool]] = None,
+        run_openclaw_audit: bool = True,
     ) -> List[ExposureFinding]:
         findings: List[ExposureFinding] = []
+        self.last_diagnostics = {
+            "status": "ok" if self.atr.available else "unavailable",
+            "timed_out_paths": [],
+            "read_error_paths": [],
+            "worker_errors": [],
+        }
         total = len(targets)
-        for i, t in enumerate(targets):
-            if should_cancel and should_cancel():
-                break
-            if is_whitelisted_path(t.path):
+        worker = (
+            _ATRProcessWorker(self.include_experimental, self.high_severity_only)
+            if self.atr.available
+            else None
+        )
+        try:
+            for i, t in enumerate(targets):
+                if should_cancel and should_cancel():
+                    break
+                if is_whitelisted_path(t.path):
+                    if on_file_progress:
+                        on_file_progress(i + 1, total)
+                    continue
+                try:
+                    with open(t.path, "r", encoding="utf-8", errors="ignore") as f:
+                        text = f.read()
+                except OSError:
+                    self.last_diagnostics["read_error_paths"].append(t.path)
+                    if on_file_progress:
+                        on_file_progress(i + 1, total)
+                    continue
+                text = _preprocess_skill_text(t.path, text)
+                if (
+                    t.path.endswith("SKILL.md")
+                    and len(text.strip()) < _MIN_SKILL_BODY_CHARS
+                ):
+                    if on_file_progress:
+                        on_file_progress(i + 1, total)
+                    continue
+
+                # 自有高价值规则先在父进程完整扫描，不受第三方 ATR 超时影响。
+                supplemental = self.atr.supplemental_findings(
+                    t.path, text, t.source, t.agent_ids
+                )
+                if worker is not None:
+                    status, atr_findings, detail = worker.scan(
+                        t,
+                        text,
+                        timeout=_ATR_FILE_TIMEOUT_SECONDS,
+                        should_cancel=should_cancel,
+                    )
+                    if status == "ok":
+                        atr_ids = {f.id for f in atr_findings}
+                        equivalent = {
+                            "AGENTSEC-STATIC-REMOTE-EXEC": "ATR-2026-00121",
+                            "AGENTSEC-STATIC-TOOL-SHADOWING": "ATR-2026-00161",
+                        }
+                        supplemental = [
+                            f
+                            for f in supplemental
+                            if equivalent.get(f.id) not in atr_ids
+                        ]
+                        existing = {
+                            (f.id, f.location) for f in findings
+                        }
+                        findings.extend(
+                            f
+                            for f in atr_findings
+                            if (f.id, f.location) not in existing
+                        )
+                    elif status == "timeout":
+                        self.last_diagnostics["timed_out_paths"].append(t.path)
+                    elif status == "error":
+                        self.last_diagnostics["worker_errors"].append(
+                            {"path": t.path, "error": detail}
+                        )
+                findings.extend(supplemental)
                 if on_file_progress:
                     on_file_progress(i + 1, total)
-                continue
-            try:
-                with open(t.path, "r", encoding="utf-8", errors="ignore") as f:
-                    text = f.read()
-            except OSError:
-                if on_file_progress:
-                    on_file_progress(i + 1, total)
-                continue
-            text = _preprocess_skill_text(t.path, text)
-            if t.path.endswith("SKILL.md") and len(text) < _MIN_SKILL_BODY_CHARS:
-                if on_file_progress:
-                    on_file_progress(i + 1, total)
-                continue
-            findings.extend(self.atr.scan_file(t.path, text, t.source, t.agent_ids))
-            if on_file_progress:
-                on_file_progress(i + 1, total)
+        finally:
+            if worker is not None:
+                worker.close()
+
+        if self.last_diagnostics["status"] != "unavailable" and (
+            self.last_diagnostics["timed_out_paths"]
+            or self.last_diagnostics["read_error_paths"]
+            or self.last_diagnostics["worker_errors"]
+        ):
+            self.last_diagnostics["status"] = "partial"
         if should_cancel and should_cancel():
             return findings
         # 仅对已发现的真实 OpenClaw Agent 跑官方 audit（需 openclaw CLI；claw3d 不算）
-        for agent in agents:
-            if should_cancel and should_cancel():
-                break
-            if agent.kind == "openclaw":
-                findings.extend(self.audit.collect(agent))
+        if run_openclaw_audit:
+            for agent in agents:
+                if should_cancel and should_cancel():
+                    break
+                if agent.kind == "openclaw":
+                    findings.extend(self.audit.collect(agent))
         return findings

@@ -189,9 +189,12 @@ class HermesAdapter(AgentAdapter):
         seen: set[str] = set()
 
         def add(path: str, source: str) -> None:
-            if path and path not in seen and os.path.isfile(path):
-                seen.add(path)
-                out.append((path, source))
+            if not path or not self.path_in_scope(path):
+                return
+            real = os.path.realpath(path)
+            if real not in seen and os.path.isfile(real):
+                seen.add(real)
+                out.append((real, source))
 
         if os.path.isfile(cfg_path):
             add(cfg_path, SRC.AGENT_CONFIG.value)

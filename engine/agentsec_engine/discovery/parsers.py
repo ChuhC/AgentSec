@@ -17,6 +17,8 @@ import os
 import re
 import shutil
 import subprocess
+from email.parser import Parser
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import yaml
@@ -549,10 +551,39 @@ def _parse_pyproject_deps(path: str) -> List[Tuple[str, str]]:
         if not spec:
             continue
         name = re.split(r"[<>=!~\[]", spec, maxsplit=1)[0].strip()
-        ver = clean_version(spec)
+        # 只有精确 pin 才能作为版本；>= / ~= 等是约束，不是实际安装版本。
+        suffix = spec[len(name):]
+        exact = re.search(r"(?:^|,)\s*==\s*([0-9][\w.+-]*)", suffix)
+        ver = exact.group(1) if exact and "*" not in exact.group(1) else ""
         if name:
             out.append((name, ver))
     return out
+
+
+def _normalize_dist_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _installed_pypi_versions(agent_dir: str) -> Dict[str, str]:
+    """读取 Agent 虚拟环境中的 dist-info 元数据，不执行该环境里的代码。"""
+    root = Path(agent_dir)
+    site_roots = list(root.glob(".venv/lib/python*/site-packages"))
+    site_roots += list(root.glob("venv/lib/python*/site-packages"))
+    site_roots += [root / ".venv" / "Lib" / "site-packages", root / "venv" / "Lib" / "site-packages"]
+    versions: Dict[str, str] = {}
+    for site in site_roots:
+        if not site.is_dir():
+            continue
+        for metadata in site.glob("*.dist-info/METADATA"):
+            try:
+                headers = Parser().parsestr(metadata.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                continue
+            name = headers.get("Name", "").strip()
+            version = headers.get("Version", "").strip()
+            if name and version:
+                versions[_normalize_dist_name(name)] = version
+    return versions
 
 
 def deps_from_pyproject(path: str, agent_id: str) -> List[Asset]:
@@ -586,9 +617,10 @@ def deps_from_npm_workspace(agent_dir: str, agent_id: str) -> List[Asset]:
             if key not in by_key:
                 by_key[key] = dep_asset(agent_id, str(name), ver, "npm")
 
-    for name, ver in _parse_pyproject_deps(os.path.join(agent_dir, "pyproject.toml")):
-        if not ver:
-            continue
+    installed_pypi = _installed_pypi_versions(agent_dir)
+    for name, _declared_ver in _parse_pyproject_deps(os.path.join(agent_dir, "pyproject.toml")):
+        # 声明约束只用于确定直接依赖名；CVE 版本必须来自实际安装元数据。
+        ver = installed_pypi.get(_normalize_dist_name(name), "")
         key = (name, ver, "PyPI")
         if key not in by_key:
             by_key[key] = dep_asset(agent_id, name, ver, "PyPI")
@@ -908,4 +940,3 @@ def discover_channels(
             )
 
     return out
-

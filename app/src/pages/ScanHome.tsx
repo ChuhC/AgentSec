@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useApp } from "../store";
 import type { ScanScope } from "../store";
+import { applySelectedDirectory, canConfirmScanPath } from "../scanPath";
 import {
   IconCube,
   IconFolder,
@@ -21,6 +22,7 @@ function ScanPathModal({
   const { t } = useApp();
   const [mode, setMode] = useState<ScanScope>("all");
   const [path, setPath] = useState("");
+  const [picking, setPicking] = useState(false);
   return (
     <div className="modal-mask" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -51,8 +53,17 @@ function ScanPathModal({
           />
           <button
             className="btn btn-sm"
-            disabled={mode === "all"}
-            onClick={() => setPath("/Users/me/agents")}
+            disabled={mode === "all" || picking}
+            onClick={async () => {
+              if (!window.agentsec?.chooseDirectory) return;
+              setPicking(true);
+              try {
+                const selected = await window.agentsec.chooseDirectory();
+                setPath((current) => applySelectedDirectory(current, selected));
+              } finally {
+                setPicking(false);
+              }
+            }}
           >
             {t("scanHome.pickFolder")}
           </button>
@@ -63,6 +74,7 @@ function ScanPathModal({
           </button>
           <button
             className="btn btn-primary"
+            disabled={!canConfirmScanPath(mode, path)}
             onClick={() => onConfirm(mode, mode === "custom" ? path : undefined)}
           >
             {t("common.action.confirm")}

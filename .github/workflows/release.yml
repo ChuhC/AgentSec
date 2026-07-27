@@ -30,8 +30,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  quality:
+    name: Quality gate
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   build-macos:
     name: macOS DMG (${{ matrix.arch }})
+    needs: [quality]
     runs-on: macos-latest
     strategy:
       fail-fast: false

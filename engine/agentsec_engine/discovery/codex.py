@@ -16,6 +16,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import urllib.parse
 from typing import Dict, List, Optional, Set, Tuple
 
 from ..models import Agent, Asset, AssetStatus, AssetType, FindingSource, PermissionEntry, Severity
@@ -267,9 +268,16 @@ def _mcp_to_asset(
     url = str(srv.get("url") or "")
     enabled = srv.get("enabled", True) is not False
     if url:
-        purpose = f"MCP · {name}（{url}）"
+        parsed = urllib.parse.urlsplit(url)
+        safe_url = urllib.parse.urlunsplit(
+            (parsed.scheme, parsed.hostname or "", parsed.path, "", "")
+        )
+        purpose = f"MCP · {name}（{safe_url or '远程服务'}）"
     else:
-        detail = " ".join([cmd] + args).strip() or name
+        package = parsers.parse_mcp_npm_package(
+            {"command": cmd, "args": args}
+        )
+        detail = package or os.path.basename(cmd) or name
         purpose = f"MCP · {name}（{detail}）"
     env = srv.get("env") or {}
     cred_keys = list(env.keys())[:6]
@@ -396,7 +404,7 @@ class CodexAdapter(AgentAdapter):
     def _project_assets(self, config: dict) -> List[Asset]:
         out: List[Asset] = []
         for project_path in _trusted_projects(config):
-            if not os.path.isdir(project_path):
+            if not self.path_in_scope(project_path) or not os.path.isdir(project_path):
                 continue
             proj_config_path = os.path.join(project_path, ".codex", "config.toml")
             proj_config = _read_toml(proj_config_path)
@@ -599,6 +607,8 @@ class CodexAdapter(AgentAdapter):
         return out
 
     def _dependency(self) -> List[Asset]:
+        if self.scope_path is not None:
+            return []
         ver = resolve_codex_installed_version()
         if not ver:
             return []
@@ -612,7 +622,7 @@ class CodexAdapter(AgentAdapter):
                 agent_id="codex",
                 type=AT.DEPENDENCY.value,
                 name=CODEX_PKG,
-                version=ver,
+                version=ver.lstrip("vV"),
                 status=ST.ENABLED.value,
                 purpose="Codex CLI 主程序",
                 source="Codex",
@@ -633,7 +643,11 @@ class CodexAdapter(AgentAdapter):
         seen: Set[str] = set()
 
         def add(path: Optional[str], source: str) -> None:
-            if not path or not os.path.isfile(path):
+            if (
+                not path
+                or not self.path_in_scope(path)
+                or not os.path.isfile(path)
+            ):
                 return
             real = os.path.realpath(path)
             if real in seen:
@@ -663,6 +677,8 @@ class CodexAdapter(AgentAdapter):
                 if "SKILL.md" in filenames:
                     add(os.path.join(dirpath, "SKILL.md"), SRC.SKILL.value)
         for project_path in _trusted_projects(config):
+            if not self.path_in_scope(project_path):
+                continue
             add(os.path.join(project_path, "AGENTS.md"), SRC.RULE.value)
             add(os.path.join(project_path, ".codex", "config.toml"), SRC.AGENT_CONFIG.value)
         for plugin_id, enabled in _enabled_codex_plugins(config):
