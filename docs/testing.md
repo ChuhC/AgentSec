@@ -5,6 +5,7 @@
 | 层级 | 覆盖内容 | PR / push 门禁 |
 |---|---|---|
 | 前端单元测试 | 扫描路径、结果完整性评分、目录选择 | Vitest；核心纯逻辑行/函数/语句 ≥90%，分支 ≥85% |
+| 依赖安全审计 | 前端、Electron、打包及测试完整依赖树 | `npm audit`；所有已知漏洞为零 |
 | 引擎单元测试 | Adapter、解析器、CVE、脱敏、安全写回 | Python 3.10 / 3.11 / 3.12 全量执行 |
 | 精准度回归 | 恶意/良性 ATR 语料、规则来源路由、行号、长文件 | 恶意样本命中指定检测器；良性样本零告警；语料规模不可静默缩水 |
 | 流水线集成测试 | 自定义范围发现 → ATR worker → CVE → Reporter → 快照 | 使用真实文件与真实 ATR 子进程，禁止联网 |
@@ -32,6 +33,7 @@
 # 前端测试与覆盖率
 cd app
 npm ci
+npm audit --audit-level=low
 npm run test:coverage
 npm run build
 

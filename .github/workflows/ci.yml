@@ -32,6 +32,14 @@ jobs:
         working-directory: app
         run: npm ci
 
+      - name: Audit known dependency vulnerabilities
+        working-directory: app
+        run: npm audit --audit-level=low
+
+      - name: Validate overridden dependency compatibility
+        working-directory: app
+        run: npm ls brace-expansion minimatch
+
       - name: Run frontend coverage gate
         working-directory: app
         run: npm run test:coverage
