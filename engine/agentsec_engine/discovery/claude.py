@@ -285,17 +285,37 @@ class ClaudeAdapter(AgentAdapter):
 
     def _present(self) -> Tuple[Optional[str], bool]:
         home = self.resolve_home()
-        has_json = os.path.isfile(claude_json_path())
+        global_json = claude_json_path()
+        has_json = self.path_in_scope(global_json) and os.path.isfile(global_json)
         if home or has_json:
             return home, has_json
         return None, False
+
+    def _read_scoped_claude_json(self) -> dict:
+        path = claude_json_path()
+        if not self.path_in_scope(path):
+            return {}
+        data = parsers.read_json(path) or {}
+        if self.scope_path is None:
+            return data
+        projects = data.get("projects")
+        if isinstance(projects, dict):
+            data = {
+                **data,
+                "projects": {
+                    path: meta
+                    for path, meta in projects.items()
+                    if self.path_in_scope(str(path))
+                },
+            }
+        return data
 
     def detect(self) -> Optional[Agent]:
         home, has_json = self._present()
         if not home and not has_json:
             return None
         settings = parsers.read_json(self._settings_path(home) or "") or {}
-        claude_json = parsers.read_json(claude_json_path()) or {}
+        claude_json = self._read_scoped_claude_json()
         if not home and not settings and not claude_json:
             return None
         self._home = home
@@ -369,7 +389,7 @@ class ClaudeAdapter(AgentAdapter):
             settings = parsers.read_json(self._settings_path(home) or "") or {}
         claude_json = getattr(self, "_claude_json", None)
         if claude_json is None:
-            claude_json = parsers.read_json(claude_json_path()) or {}
+            claude_json = self._read_scoped_claude_json()
         return (
             self._mcp(claude_json)
             + self._plugin_mcp(home, settings)
@@ -651,6 +671,8 @@ class ClaudeAdapter(AgentAdapter):
         return out
 
     def _deps(self) -> List[Asset]:
+        if self.scope_path is not None:
+            return []
         ver = resolve_claude_installed_version()
         if not ver:
             return []
@@ -755,9 +777,12 @@ class ClaudeAdapter(AgentAdapter):
         seen: Set[str] = set()
 
         def add(path: str, source: str) -> None:
-            if path and path not in seen and os.path.isfile(path):
-                seen.add(path)
-                out.append((path, source))
+            if not path or not self.path_in_scope(path):
+                return
+            real = os.path.realpath(path)
+            if real not in seen and os.path.isfile(real):
+                seen.add(real)
+                out.append((real, source))
 
         settings_path = self._settings_path(home)
         if settings_path:
@@ -767,7 +792,7 @@ class ClaudeAdapter(AgentAdapter):
             add(local_settings, SRC.AGENT_CONFIG.value)
 
         cj = claude_json_path()
-        if os.path.isfile(cj):
+        if self.path_in_scope(cj) and os.path.isfile(cj):
             try:
                 if os.path.getsize(cj) <= CLAUDE_JSON_MAX_BYTES:
                     add(cj, SRC.AGENT_CONFIG.value)
@@ -799,7 +824,7 @@ class ClaudeAdapter(AgentAdapter):
                     if "SKILL.md" in files:
                         add(os.path.join(root, "SKILL.md"), SRC.SKILL.value)
 
-        claude_json = getattr(self, "_claude_json", None) or parsers.read_json(claude_json_path()) or {}
+        claude_json = getattr(self, "_claude_json", None) or self._read_scoped_claude_json()
         for project_path, _proj in _iter_projects(claude_json):
             for fname in _PROJECT_RULE_FILES:
                 add(os.path.join(project_path, fname), SRC.RULE.value)

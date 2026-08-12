@@ -11,7 +11,7 @@
 
 ### 1. 功能目标
 
-- **安全扫描**：本机 Hermes / OpenClaw 一键扫描；暴露面/基线 + Prompt Injection 规则检测；组件 CVE（联网 OSV）。
+- **安全扫描**：本机 Hermes / OpenClaw / Claude Code / Codex 一键扫描；暴露面/基线 + Prompt Injection 规则检测；组件 CVE（联网 OSV）。
 - **资产管理**：Step6/7 查看 MCP/Skills/知识库/依赖；更新/禁用/卸载；权限雷达与弹窗聚合。
 - **桌面交付**：macOS dmg；暗紫毛玻璃 UI；设置与确认策略内置。
 
@@ -20,7 +20,7 @@
 | 属性 | 目标 |
 |------|------|
 | **性能** | 单 Agent ≤1min；`--all` ≤2min；10s 内进度+资产计数 |
-| **可用性** | 扫描未完成不 commit；保留上次完整快照；写失败弹框 |
+| **可用性** | 取消/崩溃不 commit；可恢复的局部失败以 `partial` commit 并明确提示；写失败弹框 |
 | **安全性** | 纯本地；落盘脱敏；无遥测/导出 |
 | **存储** | 仅最近一次快照；重启可读；总量 ≤300MB |
 | **团队** | 1 人；Python 引擎 + TS 桌面壳 |
@@ -28,7 +28,7 @@
 ### 3. 系统复杂度定级
 
 - **当前定级：L2**
-- **定级依据**：本机双进程桌面应用 + 模块化单体 Python 引擎 + 2 个 Adapter；无服务端、无多租户。
+- **定级依据**：本机双进程桌面应用 + 模块化单体 Python 引擎 + 4 个 Adapter；无服务端、无多租户。
 
 ---
 
@@ -52,13 +52,13 @@
 
 | 对象 | 说明 |
 |------|------|
-| `Agent` | Hermes / OpenClaw 实例 |
+| `Agent` | Hermes / OpenClaw / Claude Code / Codex 实例 |
 | `Asset` | MCP / Skill / 知识库 / 依赖 |
 | `PermissionEntry` | 权限条目（含来源类型） |
 | `ExposureFinding` | 暴露面/基线/Prompt 注入发现 |
 | `CVEFinding` | 组件 CVE 匹配结果 |
-| `ScanSnapshot` | 最近一次完整扫描快照（脱敏后） |
-| `ScanMeta` | 时间、路径、耗时、`cve_status` |
+| `ScanSnapshot` | 最近一次已完成扫描快照（完整或部分完成，脱敏后） |
+| `ScanMeta` | 时间、路径、耗时、整体/Adapter/ATR/CVE 完整性与错误计数 |
 
 ---
 
@@ -77,15 +77,13 @@ flowchart TB
     UI <-->|IPC JSON| Engine
   end
   FS[(本机文件系统)]
-  Hermes[Hermes]
-  OpenClaw[OpenClaw]
+  Agents[Hermes / OpenClaw / Claude Code / Codex]
   OSV[OSV / CVE API]
   NPM[npm / pip]
 
   User --> UI
   Engine --> FS
-  Engine --> Hermes
-  Engine --> OpenClaw
+  Engine --> Agents
   Engine -->|HTTPS 必须| OSV
   Engine -->|update 路径| NPM
 ```
@@ -133,14 +131,17 @@ flowchart TB
 
 ```text
 ExposureDetector
-  ├─ ATREngine（pyATR）          # MVP 主规则源；本地 rules/；pattern 类规则
+  ├─ ATREngine（pyATR 0.2.6）    # bundled rules；按来源过滤 scan_target
+  │   └─ 可终止 worker 进程      # 单文件 12s 超时；取消时强制终止
   ├─ OpenClawAuditCollector      # wrap `openclaw security audit --json`
-  └─（vNext）agentsec 扩展 YAML   # Hermes/OpenClaw 专有少量规则
+  └─ AgentSecStaticRules         # 远程脚本执行等高置信补充规则
 ```
 
 | 扫描对象 | 引擎 |
 |----------|------|
-| Skill 目录、SKILL.md、MCP JSON、Agent 配置片段 | ATR `evaluate` / `scan` |
+| Skill 目录、SKILL.md | ATR `evaluate`；仅运行 `scan_target=skill|both` |
+| MCP JSON/YAML/TOML | ATR `evaluate`；仅运行 `scan_target=mcp|both` |
+| 其他 Agent 配置 | ATR `evaluate`；仅运行 `scan_target=both` |
 | OpenClaw gateway/FS/权限基线 | OpenClaw 官方 audit |
 | 组件依赖 CVE | **不在此模块** → CVEDetector |
 
@@ -168,15 +169,15 @@ sequenceDiagram
     C->>R: cve_unavailable
   end
   R->>O: draft result
-  alt completed
+  alt complete or partial
     O->>S: commit replace
-    O->>UI: scan.completed
+    O->>UI: scan.completed + completeness diagnostics
   else cancel/crash
     O--xS: discard
   end
 ```
 
-*图注：异步 progress；完成才 commit；取消/崩溃丢弃本次。*
+*图注：异步 progress；`complete`、`partial`、`no_agents` 均是已完成状态并带诊断；取消/崩溃丢弃本次。*
 
 ### 4. 核心数据流图
 
@@ -184,7 +185,7 @@ sequenceDiagram
 flowchart LR
   subgraph ReadSources[读取]
     FS2[(本机 FS)]
-    Agents2[Hermes/OpenClaw]
+    Agents2[Hermes/OpenClaw/Claude Code/Codex]
     OSV2[OSV API]
   end
 
@@ -264,7 +265,7 @@ flowchart TB
 | OSV 响应 | 可选内存/短期缓存（同次扫描 dedupe） | — |
 | CVE 本地库 | **不做** | `cve/` 目录 + `LocalCVEStore` Provider |
 | npm 缓存 | **不管理** | 不管理 |
-| ATR rules | **内置子集**（`pattern` + skill/mcp/config）随 dmg | 可选在线更新 rule pack |
+| ATR rules | pyATR 0.2.6 **bundled rules** + 本地排除表，随引擎冻结 | 可选在线更新 rule pack |
 
 ### 3. Asset patch 语义（B3-b）
 
@@ -279,6 +280,7 @@ flowchart TB
 - Discovery 与双 Detector 顺序/有限并行；Adapter 级失败不阻塞其他 Agent。
 - UI 与引擎 IPC 异步；progress 事件驱动。
 - 10s 内推送阶段 + 资产计数，不推 partial Finding。
+- ATR 每文件在独立可终止进程中执行，默认 12s 硬超时；取消扫描会终止活动 worker。
 
 ### 2. 安全性设计
 
@@ -293,8 +295,8 @@ flowchart TB
 
 ### 4. 可维护性与代码规范
 
-- Adapter 插件边界：`HermesAdapter` / `OpenClawAdapter` 实现统一端口。
-- **ExposureDetector**：`pyatr.ATREngine` + 内置 `rules/`；MVP 仅启用 `detection_tier: pattern` 且目标为 skill / mcp_config / agent_config 的规则子集。
+- Adapter 插件边界：`HermesAdapter` / `OpenClawAdapter` / `ClaudeAdapter` / `CodexAdapter` 实现统一端口；自定义范围统一执行 realpath 边界检查。
+- **ExposureDetector**：固定 `pyatr==0.2.6`，按输入来源路由 `scan_target`；Skill frontmatter 仅遮罩以保留行号；高置信远程执行规则由父进程先行扫描。
 - `CVEDetector` Provider 接口：`RemoteOSVProvider`（MVP，pip-audit/OSV）、`LocalCVEStore`（vNext 占位）。
 - Python 包结构按模块目录划分，与模块图一致。
 
@@ -315,7 +317,7 @@ flowchart TB
 
 ### 2. 架构演进路线
 
-- **MVP**：双进程 dmg；**ATR 暴露面** + Remote OSV；Snapshot replace + asset patch；2 Adapter。
+- **MVP**：双进程 dmg；**ATR 暴露面** + Remote OSV；Snapshot replace + asset patch；4 Adapter。
 - **Growth**：本地 CVE 库/缓存（离线降级）；Windows 壳；更多 Adapter（Cursor 等）。
 - **Scale**：CI 插件、可选导出报告（若需求变更）。
 
@@ -326,22 +328,23 @@ flowchart TB
 ### 依赖
 
 - Python：`pyatr`（[Agent-Threat-Rule/agent-threat-rules](https://github.com/Agent-Threat-Rule/agent-threat-rules)）
-- 规则：`rules/` **子集内置**于 dmg（扫描时不访问 npm）
+- 规则：pyATR 0.2.6 的 bundled rules + AgentSec 排除表（扫描时不联网）
 
 ### 调用形态
 
 ```python
 from pyatr import ATREngine, AgentEvent
 
-engine = ATREngine(rules_dir= bundled_rules_path)
-engine.load_rules_from_directory(bundled_rules_path)
+engine = ATREngine()
+engine.load_bundled_rules()
 
 # 对每个 Discovery 产出的可扫文件
 matches = engine.evaluate(AgentEvent(
     content=file_text,
-    event_type="skill_md",  # 或 mcp_config / agent_config
-    path=file_path,
+    fields={field: file_text for field in ALL_FIELDS},
 ))
+# 返回后再按来源过滤 rule.tags.scan_target：
+# skill -> skill|both；mcp -> mcp|both；其他配置 -> both
 # → Reporter.map_atr(rule_id, severity, location, owasp_agentic)
 ```
 
@@ -350,7 +353,7 @@ matches = engine.evaluate(AgentEvent(
 | 启用 | 跳过 |
 |------|------|
 | `detection_tier: pattern` | `behavioral` / `protocol`（需运行时日志） |
-| 目标：skill、mcp_config、agent_config | 需 LLM I/O 实时流的规则 |
+| `scan_target` 与输入来源匹配 | 需 LLM I/O 实时流的规则 |
 | `status: stable`（或经测试的 experimental） | 与 OpenClaw audit 完全重复的 check |
 
 ### Reporter 映射

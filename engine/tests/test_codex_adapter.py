@@ -151,6 +151,7 @@ def test_discover_skills_and_dependency(codex_layout):
     assert not [a for a in assets if a.type == AssetType.RULE.value]
     deps = [a for a in assets if a.type == AssetType.DEPENDENCY.value]
     assert deps[0].name == "@openai/codex"
+    assert deps[0].version == "0.142.5"
 
 
 def test_atr_targets(codex_layout):

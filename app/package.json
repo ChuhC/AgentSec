@@ -20,7 +20,10 @@
     "reactflow": "^11.11.4"
   },
   "scripts": {
+    "postinstall": "node scripts/patch-brace-expansion.cjs",
     "dev": "vite",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "screenshots": "node scripts/capture-readme-screenshots.mjs",
@@ -33,15 +36,21 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^3.2.7",
+    "brace-expansion": "5.0.8",
     "electron": "^40.10.5",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.15.7",
     "playwright": "^1.61.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.6.3",
     "vite": "^6.4.3",
     "vite-plugin-electron": "^0.29.0",
-    "vite-plugin-electron-renderer": "^0.14.6"
+    "vite-plugin-electron-renderer": "^0.14.6",
+    "vitest": "^3.2.7"
+  },
+  "overrides": {
+    "brace-expansion": "$brace-expansion"
   },
   "build": {
     "appId": "dev.agentsec.app",

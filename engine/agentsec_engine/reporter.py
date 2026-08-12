@@ -9,6 +9,8 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
+from typing import Any
 from typing import Dict, List, Tuple
 
 from .models import (
@@ -25,6 +27,11 @@ from .models import (
 _SECRET_PATTERNS = [
     re.compile(r"(sk-[A-Za-z0-9]{4})[A-Za-z0-9]{6,}"),
     re.compile(r"(gh[pous]_[A-Za-z0-9]{4})[A-Za-z0-9]{6,}"),
+    re.compile(r"(github_pat_[A-Za-z0-9_]{4})[A-Za-z0-9_]{8,}"),
+    re.compile(r"(glpat-[A-Za-z0-9_-]{4})[A-Za-z0-9_-]{6,}"),
+    re.compile(r"(npm_[A-Za-z0-9]{4})[A-Za-z0-9]{8,}"),
+    re.compile(r"(xox[baprs]-[A-Za-z0-9-]{4})[A-Za-z0-9-]{8,}"),
+    re.compile(r"(AIza[A-Za-z0-9_-]{4})[A-Za-z0-9_-]{12,}"),
     re.compile(r"(AKIA[A-Z0-9]{4})[A-Z0-9]{6,}"),
 ]
 
@@ -32,9 +39,27 @@ _SECRET_PATTERNS = [
 _SECRET_KV = re.compile(
     r"""(?ix)
     ( "?(?:api[_-]?key|apikey|access[_-]?key|secret|client[_-]?secret
-        |password|passwd|token|bearer|auth)[\w-]* "? \s* [:=] \s* "? )
-    ( [^\s",}]{6,} )
+        |password|passwd|token|auth|authorization|signature)[\w-]* "?
+        \s* [:=] \s* "? )
+    ( [^\s"',}&]{6,} )
     """,
+)
+_URL_SECRET = re.compile(
+    r"""(?ix)
+    ([?&](?:api[_-]?key|apikey|access[_-]?key|secret|client[_-]?secret
+      |password|passwd|token|auth|authorization|signature)=)
+    ([^&#\s]{4,})
+    """
+)
+_URL_USERINFO = re.compile(r"(https?://[^/\s:@]+:)([^@/\s]{4,})(@)", re.I)
+_BEARER = re.compile(r"(?i)(\bBearer\s+)([A-Za-z0-9._~+/=-]{8,})")
+_JWT = re.compile(
+    r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"
+)
+_PRIVATE_KEY = re.compile(
+    r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----.*?"
+    r"-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
+    re.DOTALL,
 )
 
 
@@ -46,11 +71,35 @@ def _mask_value(m: "re.Match") -> str:
 def _redact(text: str) -> str:
     if not text:
         return text
-    out = text
+    out = _PRIVATE_KEY.sub("[REDACTED PRIVATE KEY]", text)
+    out = _BEARER.sub(lambda m: m.group(1) + "[REDACTED]", out)
+    out = _JWT.sub("[REDACTED JWT]", out)
+    out = _URL_SECRET.sub(
+        lambda m: m.group(1) + m.group(2)[:4] + "…", out
+    )
+    out = _URL_USERINFO.sub(
+        lambda m: m.group(1) + "[REDACTED]" + m.group(3), out
+    )
     out = _SECRET_KV.sub(_mask_value, out)
     for pat in _SECRET_PATTERNS:
         out = pat.sub(lambda m: m.group(1) + "…", out)
     return out
+
+
+def redact_snapshot_dict(value: Any) -> Any:
+    """递归脱敏快照的所有字符串字段，包括 Agent/Asset 元数据。"""
+    value = deepcopy(value)
+
+    def walk(item):
+        if isinstance(item, str):
+            return _redact(item)
+        if isinstance(item, list):
+            return [walk(v) for v in item]
+        if isinstance(item, dict):
+            return {k: walk(v) for k, v in item.items()}
+        return item
+
+    return walk(value)
 
 
 _AGG_KEY = lambda f: (f.source, f.id)  # noqa: E731

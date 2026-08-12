@@ -90,6 +90,7 @@ export interface CVEItem {
   severity: Severity;
   cvss: number;
   summary: string;
+  data_status?: "complete" | "incomplete";
 }
 
 export interface CVEFinding {
@@ -110,8 +111,15 @@ export interface ScanMeta {
   finished_at: string;
   duration_seconds: number;
   scope: string;
-  cve_status: "ok" | "unavailable";
+  scan_status?: "complete" | "partial" | "no_agents";
+  adapter_status?: Record<string, string>;
+  exposure_status?: "ok" | "partial" | "unavailable";
+  exposure_timed_out_count?: number;
+  exposure_read_error_count?: number;
+  cve_status: "ok" | "partial" | "unavailable";
   cve_scanned_count?: number;
+  cve_skipped_count?: number;
+  cve_detail_error_count?: number;
 }
 
 export interface ScanSnapshot {
@@ -155,6 +163,7 @@ declare global {
     agentsec?: {
       platform: NodeJS.Platform;
       request: (method: string, params?: any) => Promise<any>;
+      chooseDirectory: () => Promise<string | null>;
       onEvent: (cb: (e: { event: string; data: any }) => void) => () => void;
       updater?: {
         getInfo: () => Promise<{

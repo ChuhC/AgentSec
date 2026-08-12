@@ -15,9 +15,9 @@
 |----|------|
 | **暴露面引擎** | [ATR](https://github.com/Agent-Threat-Rule/agent-threat-rules) via **pyatr 0.2.6**（`load_bundled_rules()`） |
 | **规则交付** | pyatr 包**内置**规则，随引擎打包；扫描时 **纯离线**、无 LLM |
-| **运行时** | pyatr 需 **Python ≥ 3.10**；引擎跑在 `engine/.venv`（3.11） |
+| **运行时** | pyatr 需 **Python ≥ 3.10**；单文件在可终止 worker 进程运行，默认硬超时 12s |
 | **CVE** | **不在 ATR**；由 `CVEDetector` + OSV 单独处理 |
-| **OpenClaw 补充** | `openclaw security audit --json`（占位，待接入） |
+| **OpenClaw 补充** | 已接入 `openclaw security audit --json`；仅全机扫描运行，自定义范围禁用 |
 | **MVP 规则子集（默认）** | `stable`+`experimental` 且 `severity∈{critical,high,medium}`、`scan_target∈{mcp,skill,both}`；experimental 的 critical/high 另需 `confidence∈{high,medium-high}`，medium 全量纳入 ⇒ **约 266 条**（排除 12 条高误报，见 §2.1）|
 | **Legacy 最小子集** | `include_experimental=False` 且 `high_severity_only=False` ⇒ **约 16 条** stable |
 
@@ -45,7 +45,24 @@
 
 新增排除项时：编辑 `excluded_rules.yaml` 并同步更新本表；重启引擎后重新扫描生效。
 
-扫描前对 `SKILL.md` 剥离 YAML frontmatter（`--- … ---`），正文过短（&lt;32 字符）则跳过。
+扫描前对 `SKILL.md` 的 YAML frontmatter 做**等长遮罩**（不删除），因此正文命中的原始
+行号保持准确；正文过短（&lt;32 字符）则跳过。文件内容不再按 65,536 字符截断。
+
+### 2.2 准确率回归语料
+
+正负样本维护在 **`engine/tests/fixtures/atr_accuracy.json`**，由
+`engine/tests/test_exposure_accuracy.py` 参数化执行。恶意样本必须命中其
+`expected_any_of` 中至少一个预期检测器；良性样本必须零告警，防止用另一个误报“碰巧”
+满足恶意样本测试。
+
+当前语料覆盖 Prompt override、凭证外传、远程脚本直执行、跨工具优先级劫持，以及
+安全防御文档、环境变量调试、MCP/密钥文档、本机健康检查、编码/线协议、XML 代码、
+替代 API endpoint 等常见良性内容。每次处理线上或 dogfood 误报/漏报时，必须先把最小
+复现加入该语料，再调整规则组合条件。
+
+对 pyATR 中已知过宽但仍有有效信号的规则，不直接按单关键词采信，而是在
+`ExposureDetector` 中增加局部上下文组合条件；远程下载直执行和明确的跨工具劫持由
+AgentSec 静态补充检测器兜底。
 
 ### 实测 API（pyatr 0.2.6）
 
@@ -60,6 +77,8 @@ matches = engine.evaluate(ev)   # → ATRMatch(rule_id, title, severity, confide
 - 合法 `event_type`：`llm_input / llm_output / tool_call / tool_response / multi_agent_message`（另 `content` 字段直接可匹配）
 - `engine.rules` 只读 ⇒ 子集通过**过滤 matches 的 rule_id**实现（而非替换规则集）
 - 规则分类信息在 `rule.tags`：`category / subcategory / scan_target / confidence`
+- 规则按输入来源二次过滤：Skill 仅接收 `skill|both`，MCP 仅接收 `mcp|both`，
+  其他 Agent 配置仅接收 `both`，防止跨目标规则造成误报。
 
 ---
 
@@ -97,9 +116,9 @@ matches = engine.evaluate(ev)   # → ATRMatch(rule_id, title, severity, confide
 
 | Discovery 产出 | ATR `event_type` / 扫法 | 示例路径 |
 |----------------|-------------------------|----------|
-| Skill 目录 / `SKILL.md` | `skill_md` / 目录 scan | `~/.*/skills/**`, agent skill 根 |
-| MCP 注册 JSON | `mcp_config` | `mcp.json`, `claude_desktop_config` 等价物 |
-| Agent 主配置 | `agent_config` | OpenClaw `openclaw.json`, Hermes 配置 |
+| Skill 目录 / `SKILL.md` | 所有静态字段 + 仅 `scan_target=skill|both` | `~/.*/skills/**`, agent skill 根 |
+| MCP 注册 JSON/YAML/TOML | 所有静态字段 + 仅 `scan_target=mcp|both` | 各 Agent MCP 配置 |
+| Agent 主配置 | 所有静态字段 + 仅 `scan_target=both` | OpenClaw、Hermes、Claude、Codex 配置 |
 | 依赖 lockfile | **不送 ATR** | → `CVEDetector` only |
 
 ---
@@ -136,12 +155,14 @@ matches = engine.evaluate(ev)   # → ATRMatch(rule_id, title, severity, confide
 - [x] **子集口径（默认）**：`stable|experimental` + `severity∈{critical,high,medium}` + 静态 `scan_target`
       − `excluded_rules.yaml`；experimental 的 critical/high 需 `confidence∈{high,medium-high}`
 - [x] **Legacy 最小子集**：`ExposureDetector(include_experimental=False, high_severity_only=False)` → ~16 条
-- [x] **样例驱动**：`data/samples/`（Hermes/OpenClaw 的 mcp.json + SKILL.md）让真实 ATR 跑出
-      `ATR-2026-NNNNN` 命中（含真实行号定位）
+- [x] **准确率语料**：`tests/fixtures/atr_accuracy.json` 同时维护恶意与良性样本；恶意样本
+      校验预期 detector ID，良性样本要求零告警
 - [x] **映射**：severity（critical/high→高，medium→中，其余→低）、category→中文、
       `matched_patterns` 回溯原文片段+行号作证据、按类别生成中文 `recommendation`/通俗说明
-- [ ] **真实 Adapter 路径**：`atr_targets()` 现返回样例文件，待替换为本机实际 skill/mcp/agent 配置
-- [ ] **OpenClawAuditCollector**：接入 `openclaw security audit --json`
+- [x] **真实 Adapter 路径**：各 Adapter 的 `atr_targets()` 返回本机 skill/mcp/agent 配置
+- [x] **OpenClawAuditCollector**：接入 `openclaw security audit --json`，过滤 summary 记录
+- [x] **隔离与完整性**：ATR 使用可终止 worker；单文件超时/读取失败写入 diagnostics，
+      整体快照标记 `partial`，UI 不显示虚假的 100 分
 - [ ] 视需要纳入 `low/info` 严重度或 `confidence=medium` 的 experimental 规则
 
 ---

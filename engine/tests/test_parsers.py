@@ -75,3 +75,34 @@ def test_deps_from_npm_workspace_production_only():
         assert "typescript" not in names
         assert "react" not in names
         assert "fsevents" not in names
+
+
+def test_pyproject_dependencies_use_installed_versions_and_skip_cve_for_absent_packages(tmp_path):
+    """CVE 查询必须使用实际安装版本，不能把约束下限当成当前版本。"""
+    (tmp_path / "pyproject.toml").write_text(
+        """[project]
+dependencies = [
+  "jinja2==3.1.6",
+  "fastapi>=0.104.0,<1",
+  "python-multipart>=0.0.9,<1",
+]
+""",
+        encoding="utf-8",
+    )
+    site = tmp_path / ".venv" / "lib" / "python3.11" / "site-packages"
+    for dist, name, version in (
+        ("Jinja2-3.1.6.dist-info", "Jinja2", "3.1.6"),
+        ("fastapi-0.133.1.dist-info", "fastapi", "0.133.1"),
+    ):
+        meta = site / dist
+        meta.mkdir(parents=True)
+        (meta / "METADATA").write_text(
+            f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n",
+            encoding="utf-8",
+        )
+
+    deps = {d.name.lower(): d for d in deps_from_npm_workspace(str(tmp_path), "test")}
+
+    assert deps["jinja2"].version == "3.1.6"
+    assert deps["fastapi"].version == "0.133.1"
+    assert deps["python-multipart"].version in (None, "")

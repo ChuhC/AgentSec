@@ -140,7 +140,7 @@ def check_hermes_update(
     cli = _resolve_hermes_cli()
 
     behind: Optional[int] = None
-    if cli and (force or not _update_check_fresh(home)):
+    if online and cli and (force or not _update_check_fresh(home)):
         behind = _run_hermes_update_check(cli, home)
         uc = _read_update_check(home)
         if behind is None and isinstance(uc.get("behind"), int):

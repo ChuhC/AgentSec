@@ -89,11 +89,45 @@ class OpenClawAdapter(AgentAdapter):
     def _discover_skills(self, home: str, data: dict) -> List[Asset]:
         sp = getattr(self, "_settings_path_cache", None) or self._real_config_path(home)
         cfg_path = sp or os.path.join(home, "openclaw.json")
-        roots = parsers.openclaw_skill_roots(home, data)
-        roots = self._extend_skill_roots_from_cli(roots)
+        roots = self._skill_roots(home, data)
+        if self.scope_path is None:
+            roots = self._extend_skill_roots_from_cli(roots)
         assets = parsers.discover_skills_in_roots("openclaw", "OpenClaw", roots)
         self._apply_openclaw_skill_entries(assets, cfg_path, data)
-        return self._merge_skills_cli(assets)
+        return self._merge_skills_cli(assets) if self.scope_path is None else assets
+
+    def _skill_roots(self, home: str, data: dict) -> List[Tuple[str, str]]:
+        if self.scope_path is None:
+            return parsers.openclaw_skill_roots(home, data)
+        roots: List[Tuple[str, str]] = []
+        seen: set[str] = set()
+
+        def add(path: Optional[str], label: str) -> None:
+            if not path:
+                return
+            real = os.path.realpath(os.path.expanduser(str(path)))
+            if (
+                real in seen
+                or not self.path_in_scope(real)
+                or not os.path.isdir(real)
+            ):
+                return
+            seen.add(real)
+            roots.append((real, label))
+
+        workspace = ((data.get("agents") or {}).get("defaults") or {}).get("workspace")
+        if workspace:
+            add(os.path.join(str(workspace), "skills"), "workspace")
+            add(os.path.join(str(workspace), ".agents", "skills"), "project-agent")
+        else:
+            add(os.path.join(home, "workspace", "skills"), "workspace")
+            add(os.path.join(home, "workspace", ".agents", "skills"), "project-agent")
+        add(os.path.join(os.path.expanduser("~"), ".agents", "skills"), "personal-agent")
+        add(os.path.join(home, "skills"), "managed")
+        add(os.path.join(home, "plugin-skills"), "plugin")
+        for extra in (((data.get("skills") or {}).get("load") or {}).get("extraDirs") or []):
+            add(str(extra), "extra")
+        return roots
 
     def _apply_openclaw_skill_entries(
         self, assets: List[Asset], cfg_path: str, data: dict
@@ -248,9 +282,12 @@ class OpenClawAdapter(AgentAdapter):
         seen: set[str] = set()
 
         def add(path: str, source: str) -> None:
-            if path and path not in seen and os.path.isfile(path):
-                seen.add(path)
-                out.append((path, source))
+            if not path or not self.path_in_scope(path):
+                return
+            real = os.path.realpath(path)
+            if real not in seen and os.path.isfile(real):
+                seen.add(real)
+                out.append((real, source))
 
         if sp:
             add(sp, SRC.AGENT_CONFIG.value)
@@ -272,4 +309,6 @@ class OpenClawAdapter(AgentAdapter):
         return out
 
     def _deps(self, home: str, _data: dict) -> List[Asset]:
+        if self.scope_path is not None:
+            return []
         return parsers.discover_openclaw_dependencies(home)

@@ -17,7 +17,7 @@ import threading
 from datetime import datetime
 from typing import Optional
 
-from .agent_manager import AgentManager
+from .agent_manager import AgentManager, scan_replacement_cves
 from .asset_manager import AssetManager, AssetOperationError
 from . import config
 from .discovery.registry import discover_agent
@@ -26,6 +26,19 @@ from .paths import safe_normalize_readable_path
 from .runtime import get_agent_runtime
 from .store import SnapshotStore
 from .paths import default_data_dir
+
+
+def _validate_scan_scope(scope: str, scope_path: Optional[str]) -> Optional[str]:
+    """校验并归一化自定义扫描路径；全机扫描不携带路径。"""
+    if scope != "custom":
+        return None
+    raw = str(scope_path or "").strip()
+    if not raw:
+        raise ValueError("请选择有效的扫描路径")
+    normalized = os.path.realpath(os.path.expanduser(raw))
+    if not os.path.isdir(normalized):
+        raise ValueError("扫描路径不存在或不是目录")
+    return normalized
 
 
 def _log_dir() -> str:
@@ -131,7 +144,7 @@ class IPCServer:
             self._error(req_id, "已有扫描进行中", code="scan_busy")
             return
         scope = params.get("scope", "本机全部")
-        scope_path = params.get("scopePath")
+        scope_path = _validate_scan_scope(str(scope), params.get("scopePath"))
         cve_online = params.get("cveOnline")
         if cve_online is None:
             cve_online = config.cve_online()
@@ -181,22 +194,21 @@ class IPCServer:
         if status != "ok" or agent is None:
             raise ValueError("无法刷新 Agent：" + str(status))
 
-        cve_payload = None
-        from .models import AssetType
-        from .detectors.cve import CVEDetector, RemoteOSVProvider
-
-        deps = [a for a in assets if a.type == AssetType.DEPENDENCY.value]
-        if deps:
-            detector = CVEDetector()
-            detector.provider = RemoteOSVProvider(online=cve_online)
-            findings, _cve_status = detector.scan(deps)
-            cve_payload = [f.to_dict() for f in findings]
+        current = self.store.load()
+        if current is None:
+            raise ValueError("无可用快照，请先完成一次全机扫描")
+        cve_payload, cve_status, cve_diagnostics = scan_replacement_cves(
+            current, agent_id, assets, online=bool(cve_online)
+        )
 
         snap = self.store.patch_agent_discovery(
             agent_id,
             agent.to_dict(),
             [a.to_dict() for a in assets],
             cve_findings=cve_payload,
+            replace_all_cve_findings=True,
+            cve_status=cve_status,
+            cve_diagnostics=cve_diagnostics,
         )
         if snap is None:
             raise ValueError("无可用快照，请先完成一次全机扫描")

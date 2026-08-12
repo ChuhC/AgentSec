@@ -15,7 +15,7 @@ from typing import Callable, List, Optional
 from .detectors.cve import CVEDetector
 from .detectors.exposure import ExposureDetector, ScanTarget
 from .discovery import discover_all
-from .models import AssetType, ScanMeta
+from .models import AssetType, ScanMeta, ScanStatus
 from .reporter import Reporter
 from .store import SnapshotStore
 
@@ -64,8 +64,26 @@ class ScanOrchestrator:
             time.sleep(0.4)
         if self._cancelled:
             return {"cancelled": True}
+        def discovery_progress(done: int, total_adapters: int, found_agents, found_assets) -> None:
+            pct = 10 + int(24 * done / max(total_adapters, 1))
+            partial_counts = {
+                "agents": len(found_agents),
+                "mcp": sum(1 for a in found_assets if a.type == AssetType.MCP.value),
+                "skills": sum(1 for a in found_assets if a.type == AssetType.SKILL.value),
+            }
+            progress(
+                "discovery",
+                pct,
+                f"正在发现本机 Agent 与资产 ({done}/{total_adapters})…",
+                partial_counts,
+            )
+
         agents, assets, atr_targets, adapter_status = discover_all(
-            scope_path, should_cancel=self._is_cancelled
+            scope_path,
+            online=False,
+            should_cancel=self._is_cancelled,
+            on_progress=discovery_progress,
+            check_updates=True,
         )
         if self._cancelled:
             return {"cancelled": True}
@@ -94,6 +112,7 @@ class ScanOrchestrator:
             targets,
             on_file_progress=atr_file_progress,
             should_cancel=self._is_cancelled,
+            run_openclaw_audit=scope_path is None,
         )
         if self._cancelled:
             return {"cancelled": True}
@@ -112,13 +131,40 @@ class ScanOrchestrator:
         # 4. 汇总 + 落盘
         progress("report", 95, "正在生成结果…", counts)
         finished = datetime.now()
+        exposure_diag = self.exposure.last_diagnostics
+        cve_diag = self.cve.last_diagnostics
+        has_adapter_error = any(
+            str(value).startswith("error") for value in adapter_status.values()
+        )
+        if not agents:
+            scan_status = ScanStatus.NO_AGENTS.value
+        elif (
+            has_adapter_error
+            or exposure_diag.get("status") != "ok"
+            or cve_status != "ok"
+        ):
+            scan_status = ScanStatus.PARTIAL.value
+        else:
+            scan_status = ScanStatus.COMPLETE.value
         meta = ScanMeta(
             started_at=started.strftime("%Y-%m-%d %H:%M:%S"),
             finished_at=finished.strftime("%Y-%m-%d %H:%M:%S"),
             duration_seconds=max(1, int(time.time() - t0)),
             scope=scope,
+            scan_status=scan_status,
+            adapter_status=adapter_status,
+            exposure_status=str(exposure_diag.get("status") or "ok"),
+            exposure_timed_out_count=len(
+                exposure_diag.get("timed_out_paths") or []
+            ),
+            exposure_read_error_count=len(
+                exposure_diag.get("read_error_paths") or []
+            )
+            + len(exposure_diag.get("worker_errors") or []),
             cve_status=cve_status,
-            cve_scanned_count=len(deps),
+            cve_scanned_count=int(cve_diag.get("queried") or 0),
+            cve_skipped_count=int(cve_diag.get("skipped") or 0),
+            cve_detail_error_count=int(cve_diag.get("detail_errors") or 0),
         )
         snapshot = self.reporter.build_snapshot(
             meta, agents, assets, exposure_findings, cve_findings

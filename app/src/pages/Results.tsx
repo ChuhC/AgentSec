@@ -8,8 +8,8 @@ import {
   exposureCounts,
   pendingActions,
   riskCategoryBreakdown,
-  scanSecurityScore,
 } from "../selectors";
+import { scanSecurityScore } from "../scanCompleteness";
 import { threatListRoute, vulnListRoute } from "../navigation";
 import { scopeFromSetting } from "../i18n";
 import { Radar } from "../components/Radar";
@@ -44,24 +44,52 @@ function ResultsScoreCard({
   score,
   onViewDetail,
 }: {
-  score: number;
+  score: number | null;
   onViewDetail: () => void;
 }) {
   const { t } = useApp();
+  const incomplete = score === null;
+  const numericScore = score ?? 0;
   const statusKey =
-    score >= 80 ? "safe" : score >= 60 ? "good" : score >= 40 ? "caution" : "risk";
+    incomplete
+      ? "incomplete"
+      : numericScore >= 80
+        ? "safe"
+        : numericScore >= 60
+          ? "good"
+          : numericScore >= 40
+            ? "caution"
+            : "risk";
   const label = t(`results.scoreStatus.${statusKey}`);
   const labelColor =
-    score >= 80 ? "var(--safe)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
+    incomplete
+      ? "var(--med)"
+      : numericScore >= 80
+        ? "var(--safe)"
+        : numericScore >= 60
+          ? "#34d399"
+          : numericScore >= 40
+            ? "var(--med)"
+            : "var(--high)";
   const ringColor =
-    score >= 80 ? "var(--purple-2)" : score >= 60 ? "#34d399" : score >= 40 ? "var(--med)" : "var(--high)";
-  const pct = score / 100;
+    incomplete
+      ? "var(--med)"
+      : numericScore >= 80
+        ? "var(--purple-2)"
+        : numericScore >= 60
+          ? "#34d399"
+          : numericScore >= 40
+            ? "var(--med)"
+            : "var(--high)";
+  const pct = numericScore / 100;
   const r = 46;
   const c = 2 * Math.PI * r;
   const desc =
-    score >= 80
+    incomplete
+      ? t("results.scoreDesc.incomplete")
+      : numericScore >= 80
       ? t("results.scoreDesc.safe")
-      : score >= 60
+      : numericScore >= 60
         ? t("results.scoreDesc.good")
         : t("results.scoreDesc.risk");
 
@@ -84,8 +112,8 @@ function ResultsScoreCard({
             />
           </svg>
           <div className="security-score-value">
-            <div className="results-score-num">{score}</div>
-            <div className="results-score-denom">/ 100</div>
+            <div className="results-score-num">{score ?? "—"}</div>
+            {!incomplete && <div className="results-score-denom">/ 100</div>}
           </div>
         </div>
         <div className="security-score-info results-score-info">
@@ -238,6 +266,9 @@ export function Results() {
   const cve = cveCounts(snapshot);
   const ac = assetCounts(snapshot);
   const cveUnavailable = snapshot.meta.cve_status === "unavailable";
+  const cvePartial = snapshot.meta.cve_status === "partial";
+  const scanStatus = snapshot.meta.scan_status ?? "complete";
+  const scanIncomplete = scanStatus !== "complete";
   const scannedDeps = snapshot.meta.cve_scanned_count ?? ac.dependencies;
   const riskCats = riskCategoryBreakdown(snapshot);
   const pending = pendingActions(snapshot);
@@ -306,8 +337,16 @@ export function Results() {
         <div className="results-toolbar-inner">
           <div className="row results-toolbar-meta">
             <div className="row results-toolbar-title" style={{ gap: 10 }}>
-              <IconCheck size={20} style={{ color: "var(--safe)" }} />
-              {t("results.scanComplete")}
+              {scanIncomplete ? (
+                <IconShield size={20} style={{ color: "var(--med)" }} />
+              ) : (
+                <IconCheck size={20} style={{ color: "var(--safe)" }} />
+              )}
+              {scanStatus === "no_agents"
+                ? t("results.scanNoAgents")
+                : scanIncomplete
+                  ? t("results.scanPartial")
+                  : t("results.scanComplete")}
             </div>
             <span className="muted row" style={{ gap: 6 }}>
               <IconClock size={15} />
@@ -330,6 +369,23 @@ export function Results() {
           </div>
         </div>
       </div>
+
+      {scanIncomplete && (
+        <div className="card" style={{ marginBottom: 16, borderColor: "var(--med)" }}>
+          <strong>{t("results.incompleteTitle")}</strong>
+          <div className="dim" style={{ marginTop: 6 }}>
+            {scanStatus === "no_agents"
+              ? t("results.incompleteNoAgents")
+              : t("results.incompleteDetail", {
+                  adapters: Object.values(snapshot.meta.adapter_status ?? {}).filter((v) =>
+                    String(v).startsWith("error")
+                  ).length,
+                  timeouts: snapshot.meta.exposure_timed_out_count ?? 0,
+                  readErrors: snapshot.meta.exposure_read_error_count ?? 0,
+                })}
+          </div>
+        </div>
+      )}
 
       <div className="results-exposure-row">
         <ResultsScoreCard
@@ -376,6 +432,10 @@ export function Results() {
           note={
             cveUnavailable
               ? undefined
+              : cvePartial
+                ? t("results.cvePartial", {
+                    count: snapshot.meta.cve_detail_error_count ?? 0,
+                  })
               : cve.affected === 0
                 ? t("results.noKnownCve")
                 : undefined
